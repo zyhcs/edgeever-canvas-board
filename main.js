@@ -1122,27 +1122,160 @@ export default {
 
     function startConnect(e, fromEl, fromPort) {
       e.stopPropagation();
-      // 简单连线逻辑：提示点击目标节点完成连接
-      if (context.ui?.showNotice) context.ui.showNotice("请点击需要连接的目标卡片完成连线", { type: "info" });
+      e.preventDefault();
 
-      function onStageClick(targetEv) {
-        const targetNode = targetEv.target.closest(".edgeever-cb-element");
-        if (targetNode && targetNode.id !== fromEl.id) {
+      if (!canvasContainerEl || !canvasData) return;
+      const svg = canvasContainerEl.querySelector(".edgeever-cb-svg-layer");
+      const viewportEl = canvasContainerEl.querySelector(".edgeever-cb-viewport");
+      if (!svg) return;
+
+      // 创建动态预览虚线
+      const tempPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      tempPath.setAttribute("class", "cb-connecting-temp-line");
+      tempPath.setAttribute("marker-end", "url(#cb-arrow-marker)");
+      svg.appendChild(tempPath);
+
+      if (viewportEl) viewportEl.classList.add("is-connecting-mode");
+
+      const { x, y, zoom } = canvasData.viewport;
+      const svgRect = svg.getBoundingClientRect();
+
+      // 根据端口计算起点坐标
+      let startX = (fromEl.x + (fromEl.w || 200)) * zoom + x;
+      let startY = (fromEl.y + (fromEl.h || 100) / 2) * zoom + y;
+
+      if (fromPort === "left") {
+        startX = fromEl.x * zoom + x;
+      } else if (fromPort === "top") {
+        startX = (fromEl.x + (fromEl.w || 200) / 2) * zoom + x;
+        startY = fromEl.y * zoom + y;
+      } else if (fromPort === "bottom") {
+        startX = (fromEl.x + (fromEl.w || 200) / 2) * zoom + x;
+        startY = (fromEl.y + (fromEl.h || 100)) * zoom + y;
+      }
+
+      let currentHoverTarget = null;
+
+      function onMouseMove(moveEv) {
+        const mouseX = moveEv.clientX - svgRect.left;
+        const mouseY = moveEv.clientY - svgRect.top;
+
+        // 平滑贝塞尔曲线
+        const dx = Math.abs(mouseX - startX) * 0.5;
+        const d = `M ${startX} ${startY} C ${startX + dx} ${startY}, ${mouseX - dx} ${mouseY}, ${mouseX} ${mouseY}`;
+        tempPath.setAttribute("d", d);
+
+        // 检测鼠标下方的目标卡片
+        const elemUnder = document.elementFromPoint(moveEv.clientX, moveEv.clientY);
+        const targetCard = elemUnder ? elemUnder.closest(".edgeever-cb-element") : null;
+
+        if (targetCard && targetCard.id !== fromEl.id) {
+          if (currentHoverTarget !== targetCard) {
+            if (currentHoverTarget) currentHoverTarget.classList.remove("is-connect-target");
+            currentHoverTarget = targetCard;
+            currentHoverTarget.classList.add("is-connect-target");
+          }
+        } else {
+          if (currentHoverTarget) {
+            currentHoverTarget.classList.remove("is-connect-target");
+            currentHoverTarget = null;
+          }
+        }
+      }
+
+      function onMouseUp(upEv) {
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
+
+        tempPath.remove();
+        if (viewportEl) viewportEl.classList.remove("is-connecting-mode");
+        if (currentHoverTarget) {
+          currentHoverTarget.classList.remove("is-connect-target");
+        }
+
+        const elemUnder = document.elementFromPoint(upEv.clientX, upEv.clientY);
+        const targetCard = elemUnder ? elemUnder.closest(".edgeever-cb-element") : null;
+
+        if (targetCard && targetCard.id !== fromEl.id) {
+          // 建立连线
           canvasData.elements.push({
             id: generateId("arrow"),
             type: "arrow",
             from: fromEl.id,
-            to: targetNode.id,
-            label: "调用",
+            to: targetCard.id,
+            label: "关联",
           });
           renderConnections();
           scheduleAutoSave();
         }
-        window.removeEventListener("click", onStageClick, { capture: true });
+      }
+
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+    }
+
+    /**
+     * 工具栏点击连线模式：依次点击起点和终点卡片建立连线
+     */
+    function startClickConnectMode() {
+      let firstSelected = null;
+      const hintPill = canvasContainerEl?.querySelector(".edgeever-cb-hint-pill");
+      const originalHint = hintPill?.innerHTML;
+
+      if (hintPill) {
+        hintPill.innerHTML = `连线模式：请先点击起点卡片，再点击目标卡片 (Esc 退出)`;
+      }
+
+      function onElementClick(e) {
+        const card = e.target.closest(".edgeever-cb-element");
+        if (!card) return;
+
+        e.stopPropagation();
+
+        if (!firstSelected) {
+          firstSelected = card;
+          card.classList.add("is-connect-target");
+          if (hintPill) {
+            hintPill.innerHTML = `已选择起点，请点击需要连接的目标卡片 (Esc 退出)`;
+          }
+        } else {
+          if (card.id !== firstSelected.id) {
+            canvasData.elements.push({
+              id: generateId("arrow"),
+              type: "arrow",
+              from: firstSelected.id,
+              to: card.id,
+              label: "关联",
+            });
+            renderConnections();
+            scheduleAutoSave();
+          }
+          cleanup();
+        }
+      }
+
+      function onKeyDown(e) {
+        if (e.key === "Escape") {
+          cleanup();
+        }
+      }
+
+      function cleanup() {
+        if (firstSelected) firstSelected.classList.remove("is-connect-target");
+        if (hintPill && originalHint) hintPill.innerHTML = originalHint;
+        window.removeEventListener("click", onElementClick, true);
+        window.removeEventListener("keydown", onKeyDown);
+
+        // 切回选择模式
+        activeTool = "select";
+        canvasContainerEl?.querySelectorAll(".edgeever-cb-tool-btn[data-tool]").forEach((b) => {
+          b.classList.toggle("is-active", b.dataset.tool === "select");
+        });
       }
 
       setTimeout(() => {
-        window.addEventListener("click", onStageClick, { capture: true, once: true });
+        window.addEventListener("click", onElementClick, true);
+        window.addEventListener("keydown", onKeyDown);
       }, 50);
     }
 
@@ -1166,6 +1299,13 @@ export default {
 
     function addNewElement(type) {
       if (!canvasData) return;
+
+      // 如果点击的是连线工具，进入点击连线模式
+      if (type === "arrow") {
+        startClickConnectMode();
+        return;
+      }
+
       const { x, y, zoom } = canvasData.viewport;
       // 放置在屏幕中心位置
       const centerX = Math.round((-x + 300) / zoom);
