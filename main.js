@@ -245,13 +245,15 @@ export default {
 
     function serializeCanvasData(noteTitle, data) {
       const title = noteTitle || "未命名画布";
+      const count = (data.elements || []).length;
       const payload = {
         version: 2,
         viewport: data.viewport || { x: 0, y: 0, zoom: 1 },
         elements: data.elements || [],
       };
       const jsonStr = JSON.stringify(payload, null, 2);
-      return `# ${title}\n\n\`\`\`excalidraw\n${jsonStr}\n\`\`\`\n`;
+      // 优雅的顶部中文摘要，EdgeEver 侧边栏卡片摘要将提取本行，不再露出 ```excalidraw 代码块
+      return `> 🎨 手绘架构思维画布 · 包含 ${count} 个图元组件\n\n\`\`\`excalidraw\n${jsonStr}\n\`\`\`\n`;
     }
 
     // 强力解析当前笔记
@@ -1021,10 +1023,29 @@ export default {
     }
 
     // 更新样式属性面板
-    function updateInspector() {
+    function updateInspector(forceOpen = false) {
       if (!canvasContainerEl) return;
       const inspector = canvasContainerEl.querySelector(".edgeever-cb-inspector");
       if (!inspector) return;
+
+      // 仅当选中了图元，或者用户主动点击了「样式」按钮开启时，才显示面板；未选中时自动隐藏，绝不遮挡画布！
+      if (selectedElementId || forceOpen) {
+        inspector.classList.add("is-open");
+      } else if (!inspector.dataset.userOpened) {
+        inspector.classList.remove("is-open");
+      }
+
+      // 顶部删除按钮联动：有选中图元时高亮可点，无选中时半透明
+      const topDelBtn = canvasContainerEl.querySelector(".btn-top-delete");
+      if (topDelBtn) {
+        if (selectedElementId) {
+          topDelBtn.style.opacity = "1";
+          topDelBtn.style.pointerEvents = "auto";
+        } else {
+          topDelBtn.style.opacity = "0.45";
+          topDelBtn.style.pointerEvents = "none";
+        }
+      }
 
       const target = canvasData?.elements.find((e) => e.id === selectedElementId) || currentStyle;
 
@@ -1056,6 +1077,24 @@ export default {
         scheduleAutoSave();
       } else {
         updateInspector();
+      }
+    }
+
+    // 删除当前选中的图元组件
+    function deleteSelectedElement() {
+      if (!selectedElementId) {
+        if (context.ui?.showNotice) {
+          context.ui.showNotice("请先点击选中需要删除的图元组件", { type: "info" });
+        }
+        return;
+      }
+      pushHistory();
+      canvasData.elements = canvasData.elements.filter((e) => e.id !== selectedElementId);
+      selectedElementId = null;
+      renderAll();
+      scheduleAutoSave();
+      if (context.ui?.showNotice) {
+        context.ui.showNotice("✓ 已删除图元组件", { type: "success" });
       }
     }
 
@@ -1096,6 +1135,9 @@ export default {
             <button type="button" class="edgeever-cb-tool-btn" data-tool="line" title="直线 (L)">${ICONS.line} <span>线条</span></button>
             <button type="button" class="edgeever-cb-tool-btn" data-tool="text" title="独立文本 (T)">${ICONS.text} <span>文本</span></button>
             <button type="button" class="edgeever-cb-tool-btn" data-tool="card" title="便签卡片 (N)">${ICONS.card} <span>便签</span></button>
+            <div class="edgeever-cb-divider"></div>
+            <button type="button" class="edgeever-cb-tool-btn btn-toggle-inspector" title="开启/收起样式面板">🎨 <span>样式</span></button>
+            <button type="button" class="edgeever-cb-tool-btn btn-top-delete" style="color:#ef4444; opacity:0.45; pointer-events:none;" title="删除选中图元 (Del)">${ICONS.trash} <span>删除</span></button>
           </div>
 
           <div class="edgeever-cb-toolbar-group">
@@ -1116,8 +1158,13 @@ export default {
           </div>
         </div>
 
-        <!-- 左侧 Excalidraw 级属性调色板 (Inspector Panel) -->
+        <!-- 左侧 Excalidraw 级属性调色板 (Inspector Panel，默认收起，选图元时浮现) -->
         <div class="edgeever-cb-inspector">
+          <div class="edgeever-cb-insp-header">
+            <span class="edgeever-cb-insp-title">🎨 样式调色板</span>
+            <button type="button" class="edgeever-cb-insp-close" title="收起面板">✕</button>
+          </div>
+
           <div class="edgeever-cb-insp-section">
             <div class="edgeever-cb-insp-label">描边颜色</div>
             <div class="edgeever-cb-palette">
@@ -1169,9 +1216,9 @@ export default {
           </div>
 
           <div class="edgeever-cb-insp-section">
-            <div class="edgeever-cb-insp-label">图层操作</div>
+            <div class="edgeever-cb-insp-label">操作</div>
             <div class="edgeever-cb-btn-group">
-              <button type="button" class="edgeever-cb-opt-btn btn-del-elem" style="color:#ef4444;">${ICONS.trash} 删除</button>
+              <button type="button" class="edgeever-cb-opt-btn btn-del-elem btn-danger" title="删除当前选中的图元组件">${ICONS.trash} <span>删除组件 (Del)</span></button>
             </div>
           </div>
         </div>
@@ -1254,6 +1301,7 @@ export default {
       });
 
       // 样式属性面板绑定
+      const inspectorEl = root.querySelector(".edgeever-cb-inspector");
       root.querySelectorAll(".edgeever-cb-inspector [data-prop]").forEach((btn) => {
         btn.onclick = () => {
           const prop = btn.dataset.prop;
@@ -1263,18 +1311,35 @@ export default {
         };
       });
 
-      // 删除元素
-      const delBtn = root.querySelector(".btn-del-elem");
-      if (delBtn) {
-        delBtn.onclick = () => {
-          if (!selectedElementId) return;
-          pushHistory();
-          canvasData.elements = canvasData.elements.filter((e) => e.id !== selectedElementId);
-          selectedElementId = null;
-          renderAll();
-          scheduleAutoSave();
+      // 样式开关与关闭按钮
+      const toggleInspBtn = root.querySelector(".btn-toggle-inspector");
+      if (toggleInspBtn && inspectorEl) {
+        toggleInspBtn.onclick = () => {
+          const isOpen = inspectorEl.classList.contains("is-open");
+          if (isOpen) {
+            inspectorEl.classList.remove("is-open");
+            delete inspectorEl.dataset.userOpened;
+          } else {
+            inspectorEl.classList.add("is-open");
+            inspectorEl.dataset.userOpened = "true";
+          }
         };
       }
+
+      const closeInspBtn = root.querySelector(".edgeever-cb-insp-close");
+      if (closeInspBtn && inspectorEl) {
+        closeInspBtn.onclick = () => {
+          inspectorEl.classList.remove("is-open");
+          delete inspectorEl.dataset.userOpened;
+        };
+      }
+
+      // 删除组件按钮绑定（顶部与面板内）
+      const topDelBtn = root.querySelector(".btn-top-delete");
+      if (topDelBtn) topDelBtn.onclick = deleteSelectedElement;
+
+      const delBtn = root.querySelector(".btn-del-elem");
+      if (delBtn) delBtn.onclick = deleteSelectedElement;
 
       // 滚轮缩放与平移
       root.addEventListener(
