@@ -142,10 +142,58 @@ export default {
     }
 
     /**
+     * 获取目标笔记本 ID（自动探测当前笔记本或默认笔记本）
+     */
+    async function resolveTargetNotebookId() {
+      // 1. 优先从当前打开的笔记获取
+      try {
+        if (context.editor?.getDocument) {
+          const doc = await context.editor.getDocument();
+          if (doc?.notebookId) return String(doc.notebookId);
+        }
+      } catch (_) {}
+
+      // 2. 尝试从 workspace 当前活跃笔记本获取
+      try {
+        if (context.workspace?.getActiveNotebook) {
+          const nb = await context.workspace.getActiveNotebook();
+          if (nb?.id) return String(nb.id);
+        }
+      } catch (_) {}
+
+      // 3. 尝试从 context.notebooks.list() 获取
+      try {
+        if (context.notebooks?.list) {
+          const list = await context.notebooks.list();
+          const nbs = Array.isArray(list) ? list : list?.notebooks || [];
+          if (nbs.length > 0 && nbs[0].id) return String(nbs[0].id);
+        }
+      } catch (_) {}
+
+      // 4. 尝试从全库笔记中借用已有 notebookId 兜底
+      try {
+        if (context.notes?.query) {
+          const res = await context.notes.query({ limit: 1 });
+          const items = Array.isArray(res) ? res : res?.notes || [];
+          if (items.length > 0 && items[0].notebookId) {
+            return String(items[0].notebookId);
+          }
+        }
+      } catch (_) {}
+
+      return "";
+    }
+
+    /**
      * 创建一篇全新无限画布笔记
      */
     async function createNewCanvasNote() {
       try {
+        const notebookId = await resolveTargetNotebookId();
+        if (!notebookId) {
+          throw new Error("未能定位有效笔记本，请确认知识库中存在至少一个笔记本。");
+        }
+
         const title = `未命名画布 ${new Date().toLocaleDateString("zh-CN")}`;
         const initialData = {
           version: 1,
@@ -181,6 +229,7 @@ export default {
         let createdNote = null;
         if (context.notes?.create) {
           createdNote = await context.notes.create({
+            notebookId,
             title,
             tags: ["画布"],
             contentMarkdown: markdownContent,
