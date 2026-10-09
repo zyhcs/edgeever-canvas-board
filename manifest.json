@@ -1,15 +1,15 @@
 {
   "type": "plugin",
   "id": "org.edgeever.plugins.canvas-board",
-  "name": "Canvas Board: Excalidraw Whiteboard Suite",
-  "version": "1.0.8",
+  "name": "Canvas Board: Native Excalidraw Whiteboard",
+  "version": "1.0.9",
   "apiVersion": "2",
   "settingsUi": "host",
-  "description": "Infinite canvas & visual whiteboard plugin for EdgeEver with full Excalidraw integration: Native new note type in dropdown menu, freehand doodles, eraser, shapes, custom palettes, libraries, and 100% offline auto-persistence.",
+  "description": "Infinite canvas & visual whiteboard plugin for EdgeEver with 100% native Excalidraw-grade hand-drawn engine: Freehand doodle, eraser, shapes, custom palettes, zero network dependency, and 100% offline auto-persistence.",
   "locales": {
     "zh-CN": {
-      "name": "Canvas Board: Excalidraw 手绘白板与架构画布",
-      "description": "为 EdgeEver 带来原生的 Excalidraw 手绘矢量白板与思维画布。无缝集成至左侧边栏「更多类型 ▾」新建菜单中，提供全套手绘涂鸦压感画笔、橡皮擦、几何图形、调色板、开源素材库，数据 100% 离线静默自动保存至笔记。"
+      "name": "Canvas Board: 原生手绘白板与架构画布",
+      "description": "为 EdgeEver 带来 100% 原生、零外部依赖的 Excalidraw 级手绘白板。集成手绘涂鸦画笔、橡皮擦、几何图形、斜线网格填充与调色板，秒开不黑屏，数据 100% 离线静默自动保存至笔记。"
     }
   },
   "author": "zyhcs",

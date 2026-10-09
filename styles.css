@@ -157,60 +157,97 @@ body.theme-light, [data-theme="light"] {
 }
 
 /* ==========================================================================
-   Excalidraw 视口集成与全屏 iframe 容器
+   左侧 Excalidraw 级属性调色板 (Style Inspector)
    ========================================================================== */
-.edgeever-cb-excalidraw-iframe {
+.edgeever-cb-inspector {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: none;
-  z-index: 10;
-  background-color: transparent;
-}
-
-.edgeever-cb-floating-bar {
-  position: absolute;
-  top: 10px;
-  right: 16px;
-  z-index: 60;
+  top: 54px;
+  left: 14px;
+  width: 200px;
+  background: var(--ee-cb-surface);
+  border: 1px solid var(--ee-cb-border);
+  border-radius: 10px;
+  padding: 12px;
+  z-index: 40;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  pointer-events: auto;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--ee-cb-shadow);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  user-select: none;
 }
 
-.edgeever-cb-mini-btn {
+.edgeever-cb-insp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.edgeever-cb-insp-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ee-cb-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.edgeever-cb-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.edgeever-cb-color-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.edgeever-cb-color-dot:hover {
+  transform: scale(1.15);
+}
+
+.edgeever-cb-color-dot.is-active {
+  border-color: var(--ee-cb-primary);
+  box-shadow: 0 0 0 2px var(--ee-cb-primary-light);
+}
+
+.edgeever-cb-btn-group {
+  display: flex;
+  gap: 4px;
+}
+
+.edgeever-cb-opt-btn {
+  flex: 1;
+  padding: 4px 6px;
+  font-size: 11px;
+  border-radius: 5px;
+  border: 1px solid var(--ee-cb-border);
+  background: var(--ee-cb-surface-elevated);
+  color: var(--ee-cb-text);
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ee-cb-text);
-  background: var(--ee-cb-surface);
-  border: 1px solid var(--ee-cb-border-hover);
-  border-radius: 8px;
-  cursor: pointer;
-  box-shadow: var(--ee-cb-shadow-sm);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: all 0.15s ease;
+  justify-content: center;
+  gap: 3px;
+  transition: all 0.12s ease;
 }
 
-.edgeever-cb-mini-btn:hover {
-  background: var(--ee-cb-surface-elevated);
+.edgeever-cb-opt-btn:hover {
   border-color: var(--ee-cb-primary);
   color: var(--ee-cb-primary);
 }
 
-.edgeever-cb-mini-btn svg {
-  width: 14px;
-  height: 14px;
-}
-
-.edgeever-cb-save-indicator.is-saving svg {
-  animation: cb-spin 0.8s linear infinite;
+.edgeever-cb-opt-btn.is-active {
+  background: var(--ee-cb-primary-light);
+  border-color: var(--ee-cb-primary);
+  color: var(--ee-cb-primary);
+  font-weight: 600;
 }
 
 /* 点阵背景图层 */
