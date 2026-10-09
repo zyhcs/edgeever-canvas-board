@@ -150,71 +150,90 @@ export default {
     }
 
     /**
-     * DOM 级精准嗅探：仅在当前编辑器容器内部探测是否含有明确的 canvas-board 标记
+     * DOM 级精准嗅探：探测当前编辑器容器内部是否含有明确的 canvas-board 标记与代码块
      */
     function sniffCanvasFromDOM() {
       const contentEl = findEditorContentContainer();
       if (!contentEl) return null;
 
-      // 仅检查编辑器内部文本是否包含明确的 ```canvas-board 标记
-      const text = contentEl.textContent || "";
-      if (text.includes("```canvas-board") || text.includes("canvas-board")) {
-        const match = text.match(/```canvas-board\s*([\s\S]*?)```/i);
-        if (match && match[1]) {
-          try {
-            const parsed = JSON.parse(match[1].trim());
-            if (parsed && Array.isArray(parsed.elements)) {
-              return { isCanvas: true, data: parsed };
-            }
-          } catch (_) {}
+      const allText = contentEl.innerText || contentEl.textContent || "";
+      const hasCanvasKeyword = /canvas-board/i.test(allText);
+
+      // 检查 EdgeEver 代码块标头是否有 CANVAS-BOARD 标识
+      const codeLangEls = contentEl.querySelectorAll("[class*='lang'], [class*='header'], [class*='title'], span, div");
+      let hasLangTag = false;
+      for (const el of codeLangEls) {
+        const t = (el.textContent || "").trim();
+        if (t === "CANVAS-BOARD" || /canvas-board/i.test(t)) {
+          hasLangTag = true;
+          break;
         }
       }
 
-      // 检查内部的 pre/code 代码块是否有 canvas-board 相关类名或内容
+      // 如果存在折叠按钮「展开余下代码」，尝试展开以获取完整内容
+      const expandBtn = Array.from(contentEl.querySelectorAll("button, div, span")).find(
+        (el) => el.textContent && el.textContent.includes("展开余下代码")
+      );
+      if (expandBtn) {
+        try {
+          expandBtn.click();
+        } catch (_) {}
+      }
+
+      // 尝试提取 JSON 数据
       const codeBlocks = contentEl.querySelectorAll("pre, code, [class*='code']");
       for (const block of codeBlocks) {
-        const blockClass = block.className || "";
-        const blockText = block.textContent || "";
-        if (blockClass.includes("canvas-board") || (blockText.includes('"elements"') && blockText.includes('"viewport"'))) {
+        const blockText = (block.innerText || block.textContent || "").trim();
+        if (blockText.includes('"elements"') && (blockText.includes('"viewport"') || blockText.includes('"version"'))) {
           try {
-            const parsed = JSON.parse(blockText.trim());
+            const parsed = JSON.parse(blockText);
             if (parsed && Array.isArray(parsed.elements)) {
               return { isCanvas: true, data: parsed };
             }
-          } catch (_) {}
+          } catch (_) {
+            const match = blockText.match(/\{[\s\S]*\}/);
+            if (match) {
+              try {
+                const parsed = JSON.parse(match[0]);
+                if (parsed && Array.isArray(parsed.elements)) {
+                  return { isCanvas: true, data: parsed };
+                }
+              } catch (_) {}
+            }
+          }
         }
+      }
+
+      if (hasCanvasKeyword || hasLangTag) {
+        return { isCanvas: true, data: null };
       }
 
       return null;
     }
 
     /**
-     * 极高严谨度的画布笔记识别：普通笔记绝不误判
+     * 画布笔记精准识别
      */
     function isCanvasNote(note, domSniff = null) {
-      if (!note) {
-        return !!(domSniff && domSniff.isCanvas);
-      }
-
-      const content = note.contentMarkdown || note.content || "";
-
-      // 1. 如果正文明确含有 ```canvas-board 块，判定为画布
-      if (CANVAS_CODEBLOCK_REGEX.test(content) || content.includes("```canvas-board")) {
+      // 1. 如果 DOM 编辑器内部嗅探到了 canvas-board 标头或代码块，判定为画布
+      if (domSniff && domSniff.isCanvas) {
         return true;
       }
 
-      // 2. 如果标签明确含有 "画布" 或 "canvas"，并且正文包含 elements 与 viewport 数据
+      if (!note) return false;
+
+      // 2. 如果标签明确含有 "画布" 或 "canvas"，判定为画布
       const hasCanvasTag = Array.isArray(note.tags) && (note.tags.includes("画布") || note.tags.includes("canvas"));
-      if (hasCanvasTag && content.includes('"elements"') && content.includes('"viewport"')) {
+      if (hasCanvasTag) {
         return true;
       }
 
-      // 3. 如果 API 返回正文暂时为空（加载中），且仅当 DOM 编辑器内确切嗅探到了 canvas-board
-      if (!content.trim() && domSniff && domSniff.isCanvas) {
+      // 3. 如果正文明确含有 ```canvas-board 块或关键字
+      const content = note.contentMarkdown || note.content || "";
+      if (CANVAS_CODEBLOCK_REGEX.test(content) || /canvas-board/i.test(content)) {
         return true;
       }
 
-      // 4. 其他任何情况（普通 Markdown、SAP 笔记、代码片段等）严格判定为 false！
       return false;
     }
 
@@ -608,6 +627,21 @@ export default {
       canvasData = parseCanvasData(rawContent, domSniff);
 
       mountCanvasUI(parentWrap, contentEl);
+
+      // 异步刷新补全：防止切换瞬间 API 延迟导致数据缺失
+      const targetNoteId = currentNote.id || currentNote.noteId;
+      if (targetNoteId && context.notes?.get) {
+        context.notes.get(targetNoteId).then((full) => {
+          if (full && (full.contentMarkdown || full.content)) {
+            const fullContent = full.contentMarkdown || full.content;
+            const freshData = parseCanvasData(fullContent);
+            if (freshData && Array.isArray(freshData.elements) && freshData.elements.length > 0) {
+              canvasData = freshData;
+              renderElements();
+            }
+          }
+        }).catch(() => {});
+      }
     }
 
     function createSourceFloatButton(parentWrap, contentEl) {
@@ -1276,6 +1310,14 @@ export default {
       });
     }
 
+    function handleGlobalClick(e) {
+      if (e.target.closest("[class*='note-item'], [class*='memo-item'], [class*='tree-node'], [role='treeitem'], .item, li")) {
+        setTimeout(() => checkAndMountCanvasBoard(true), 100);
+        setTimeout(() => checkAndMountCanvasBoard(true), 350);
+      }
+    }
+    document.addEventListener("click", handleGlobalClick, true);
+
     // 初始扫描
     setTimeout(() => {
       ensureMenuItemInjected();
@@ -1287,6 +1329,7 @@ export default {
     // 卸载与清理
     return () => {
       observer.disconnect();
+      document.removeEventListener("click", handleGlobalClick, true);
       if (canvasContainerEl) canvasContainerEl.remove();
       document.querySelector(".edgeever-cb-source-float-btn")?.remove();
       const contentEl = findEditorContentContainer();
