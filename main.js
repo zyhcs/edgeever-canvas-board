@@ -955,6 +955,14 @@ export default {
           g.appendChild(selBox);
         }
 
+        g.style.pointerEvents = "all";
+        g.addEventListener("mousedown", (e) => {
+          if (activeTool === "eraser") return;
+          e.stopPropagation();
+          selectedElementId = el.id;
+          renderAll();
+        });
+
         svgLayer.appendChild(g);
       });
     }
@@ -978,6 +986,12 @@ export default {
         if (el.id === selectedElementId) {
           node.classList.add("is-selected");
         }
+
+        node.addEventListener("mousedown", (e) => {
+          if (activeTool === "eraser") return;
+          selectedElementId = el.id;
+          renderAll();
+        });
 
         if (el.type === "card") {
           node.style.borderColor = el.strokeColor || "#2563eb";
@@ -1035,15 +1049,14 @@ export default {
         inspector.classList.remove("is-open");
       }
 
-      // 顶部删除按钮联动：有选中图元时高亮可点，无选中时半透明
+      // 顶部删除按钮联动：高亮展示
       const topDelBtn = canvasContainerEl.querySelector(".btn-top-delete");
       if (topDelBtn) {
+        topDelBtn.style.pointerEvents = "auto";
         if (selectedElementId) {
-          topDelBtn.style.opacity = "1";
-          topDelBtn.style.pointerEvents = "auto";
+          topDelBtn.style.fontWeight = "600";
         } else {
-          topDelBtn.style.opacity = "0.45";
-          topDelBtn.style.pointerEvents = "none";
+          topDelBtn.style.fontWeight = "normal";
         }
       }
 
@@ -1080,11 +1093,22 @@ export default {
       }
     }
 
-    // 删除当前选中的图元组件
+    // 删除当前选中的图元组件（智能响应：选中有删，无选删尾，随时可点）
     function deleteSelectedElement() {
       if (!selectedElementId) {
+        if (canvasData?.elements && canvasData.elements.length > 0) {
+          pushHistory();
+          const removed = canvasData.elements.pop();
+          selectedElementId = null;
+          renderAll();
+          scheduleAutoSave();
+          if (context.ui?.showNotice) {
+            context.ui.showNotice("✓ 已删除最后一个组件", { type: "success" });
+          }
+          return;
+        }
         if (context.ui?.showNotice) {
-          context.ui.showNotice("请先点击选中需要删除的图元组件", { type: "info" });
+          context.ui.showNotice("当前画布上没有可删除的组件", { type: "info" });
         }
         return;
       }
@@ -1094,7 +1118,7 @@ export default {
       renderAll();
       scheduleAutoSave();
       if (context.ui?.showNotice) {
-        context.ui.showNotice("✓ 已删除图元组件", { type: "success" });
+        context.ui.showNotice("✓ 已删除选中图元组件", { type: "success" });
       }
     }
 
@@ -1128,16 +1152,16 @@ export default {
             <button type="button" class="edgeever-cb-tool-btn" data-tool="freedraw" title="手绘涂鸦压感画笔 (P)">${ICONS.pencil} <span>画笔</span></button>
             <button type="button" class="edgeever-cb-tool-btn" data-tool="eraser" title="橡皮擦 (E)">${ICONS.eraser} <span>橡皮擦</span></button>
             <div class="edgeever-cb-divider"></div>
-            <button type="button" class="edgeever-cb-tool-btn" data-tool="rect" title="矩形框 (R)">${ICONS.rect} <span>矩形</span></button>
-            <button type="button" class="edgeever-cb-tool-btn" data-tool="diamond" title="菱形判断 (D)">${ICONS.diamond} <span>菱形</span></button>
-            <button type="button" class="edgeever-cb-tool-btn" data-tool="circle" title="圆形/椭圆 (C)">${ICONS.circle} <span>圆形</span></button>
-            <button type="button" class="edgeever-cb-tool-btn" data-tool="arrow" title="手绘箭头连线 (A)">${ICONS.arrow} <span>箭头</span></button>
-            <button type="button" class="edgeever-cb-tool-btn" data-tool="line" title="直线 (L)">${ICONS.line} <span>线条</span></button>
-            <button type="button" class="edgeever-cb-tool-btn" data-tool="text" title="独立文本 (T)">${ICONS.text} <span>文本</span></button>
-            <button type="button" class="edgeever-cb-tool-btn" data-tool="card" title="便签卡片 (N)">${ICONS.card} <span>便签</span></button>
+            <button type="button" class="edgeever-cb-tool-btn" data-tool="rect" title="点击新建矩形框 (R)">${ICONS.rect} <span>矩形</span></button>
+            <button type="button" class="edgeever-cb-tool-btn" data-tool="diamond" title="点击新建菱形判断 (D)">${ICONS.diamond} <span>菱形</span></button>
+            <button type="button" class="edgeever-cb-tool-btn" data-tool="circle" title="点击新建圆形/椭圆 (C)">${ICONS.circle} <span>圆形</span></button>
+            <button type="button" class="edgeever-cb-tool-btn" data-tool="arrow" title="点击新建手绘箭头连线 (A)">${ICONS.arrow} <span>箭头</span></button>
+            <button type="button" class="edgeever-cb-tool-btn" data-tool="line" title="点击新建直线 (L)">${ICONS.line} <span>线条</span></button>
+            <button type="button" class="edgeever-cb-tool-btn" data-tool="text" title="点击新建独立文本 (T)">${ICONS.text} <span>文本</span></button>
+            <button type="button" class="edgeever-cb-tool-btn" data-tool="card" title="点击新建便签卡片 (N)">${ICONS.card} <span>便签</span></button>
             <div class="edgeever-cb-divider"></div>
-            <button type="button" class="edgeever-cb-tool-btn btn-toggle-inspector" title="开启/收起样式面板">🎨 <span>样式</span></button>
-            <button type="button" class="edgeever-cb-tool-btn btn-top-delete" style="color:#ef4444; opacity:0.45; pointer-events:none;" title="删除选中图元 (Del)">${ICONS.trash} <span>删除</span></button>
+            <button type="button" class="edgeever-cb-tool-btn btn-toggle-inspector" title="开启/收起样式调色板">🎨 <span>样式</span></button>
+            <button type="button" class="edgeever-cb-tool-btn btn-top-delete" style="color:#ef4444;" title="删除图元组件 (Del)">${ICONS.trash} <span>删除</span></button>
           </div>
 
           <div class="edgeever-cb-toolbar-group">
@@ -1286,16 +1310,138 @@ export default {
       root.querySelector(".btn-undo").onclick = undo;
       root.querySelector(".btn-redo").onclick = redo;
 
-      // 工具栏点击
+      // 在视口中央添加全新标准组件并自动高亮选中
+      function addNewElementToCenter(tool) {
+        pushHistory();
+        const rect = viewportEl.getBoundingClientRect();
+        const { x, y, zoom } = canvasData.viewport;
+        const centerX = (-x + (rect.width || 800) / 2) / zoom;
+        const centerY = (-y + (rect.height || 600) / 2) / zoom;
+
+        let newElem = null;
+        if (tool === "card") {
+          newElem = {
+            id: generateId("card"),
+            type: "card",
+            x: centerX - 110,
+            y: centerY - 55,
+            w: 220,
+            h: 110,
+            title: "新便签",
+            content: "双击编辑内容...",
+            strokeColor: currentStyle.strokeColor === "#1e1e1e" ? "#2563eb" : currentStyle.strokeColor,
+            backgroundColor: currentStyle.backgroundColor === "transparent" ? "#dbeafe" : currentStyle.backgroundColor,
+          };
+        } else if (tool === "rect") {
+          newElem = {
+            id: generateId("rect"),
+            type: "rect",
+            x: centerX - 90,
+            y: centerY - 50,
+            w: 180,
+            h: 100,
+            strokeColor: currentStyle.strokeColor,
+            backgroundColor: currentStyle.backgroundColor,
+            fillStyle: currentStyle.fillStyle,
+            strokeWidth: currentStyle.strokeWidth,
+            roughness: currentStyle.roughness,
+          };
+        } else if (tool === "diamond") {
+          newElem = {
+            id: generateId("diamond"),
+            type: "diamond",
+            x: centerX - 65,
+            y: centerY - 65,
+            w: 130,
+            h: 130,
+            strokeColor: currentStyle.strokeColor,
+            backgroundColor: currentStyle.backgroundColor,
+            fillStyle: currentStyle.fillStyle,
+            strokeWidth: currentStyle.strokeWidth,
+            roughness: currentStyle.roughness,
+          };
+        } else if (tool === "circle") {
+          newElem = {
+            id: generateId("circle"),
+            type: "circle",
+            x: centerX - 60,
+            y: centerY - 60,
+            w: 120,
+            h: 120,
+            strokeColor: currentStyle.strokeColor,
+            backgroundColor: currentStyle.backgroundColor,
+            fillStyle: currentStyle.fillStyle,
+            strokeWidth: currentStyle.strokeWidth,
+            roughness: currentStyle.roughness,
+          };
+        } else if (tool === "arrow") {
+          newElem = {
+            id: generateId("arrow"),
+            type: "arrow",
+            x1: centerX - 80,
+            y1: centerY,
+            x2: centerX + 80,
+            y2: centerY,
+            strokeColor: currentStyle.strokeColor === "#1e1e1e" ? "#3b82f6" : currentStyle.strokeColor,
+            strokeWidth: currentStyle.strokeWidth,
+            roughness: currentStyle.roughness,
+          };
+        } else if (tool === "line") {
+          newElem = {
+            id: generateId("line"),
+            type: "line",
+            x1: centerX - 80,
+            y1: centerY,
+            x2: centerX + 80,
+            y2: centerY,
+            strokeColor: currentStyle.strokeColor,
+            strokeWidth: currentStyle.strokeWidth,
+            roughness: currentStyle.roughness,
+          };
+        } else if (tool === "text") {
+          newElem = {
+            id: generateId("text"),
+            type: "text",
+            x: centerX - 80,
+            y: centerY - 20,
+            w: 160,
+            h: 40,
+            text: "双击输入文本",
+            strokeColor: currentStyle.strokeColor,
+          };
+        }
+
+        if (newElem) {
+          canvasData.elements.push(newElem);
+          selectedElementId = newElem.id;
+          activeTool = "select";
+          root.querySelectorAll(".edgeever-cb-tool-btn[data-tool]").forEach((b) => b.classList.remove("is-active"));
+          root.querySelector(".edgeever-cb-tool-btn[data-tool='select']")?.classList.add("is-active");
+          renderAll();
+          updateInspector(true); // 自动展开调色板供用户调整
+          scheduleAutoSave();
+          if (context.ui?.showNotice) {
+            context.ui.showNotice("✓ 已添加组件，可拖拽移动或在左侧修改样式", { type: "success" });
+          }
+        }
+      }
+
+      // 工具栏点击联动
       root.querySelectorAll(".edgeever-cb-tool-btn[data-tool]").forEach((btn) => {
         btn.onclick = () => {
-          root.querySelectorAll(".edgeever-cb-tool-btn[data-tool]").forEach((b) => b.classList.remove("is-active"));
-          btn.classList.add("is-active");
-          activeTool = btn.dataset.tool;
+          const tool = btn.dataset.tool;
 
-          if (activeTool !== "select") {
-            selectedElementId = null;
-            renderAll();
+          if (tool === "select" || tool === "freedraw" || tool === "eraser") {
+            root.querySelectorAll(".edgeever-cb-tool-btn[data-tool]").forEach((b) => b.classList.remove("is-active"));
+            btn.classList.add("is-active");
+            activeTool = tool;
+            if (activeTool !== "select") {
+              selectedElementId = null;
+              renderAll();
+            }
+          } else {
+            // 点击任何形状/文本/卡片按钮，立即在画布视口中心生成一个组件并高亮选中！
+            addNewElementToCenter(tool);
           }
         };
       });
