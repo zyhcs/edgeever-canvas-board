@@ -77,20 +77,165 @@ export default {
 
     const CANVAS_CODEBLOCK_REGEX = /```canvas-board\s*([\s\S]*?)```/i;
 
-    function isCanvasNote(note) {
+    /**
+     * 强力解析当前笔记（从 Context API 与 Workspace 中多级探测）
+     */
+    async function resolveCurrentNote() {
+      // 1. 尝试从 editor.getDocument() 获取
+      try {
+        if (context.editor?.getDocument) {
+          const doc = await context.editor.getDocument();
+          if (doc) {
+            const noteId = doc.noteId || doc.id;
+            let full = null;
+            if (noteId && context.notes?.get) {
+              try {
+                full = await context.notes.get(noteId);
+              } catch (_) {}
+            }
+            return {
+              id: noteId,
+              noteId: noteId,
+              title: doc.title || full?.title || "未命名画布",
+              contentMarkdown: doc.contentMarkdown ?? full?.contentMarkdown ?? doc.content ?? full?.content ?? "",
+              content: doc.content ?? full?.content ?? doc.contentMarkdown ?? full?.contentMarkdown ?? "",
+              tags: doc.tags || full?.tags || [],
+              notebookId: doc.notebookId || full?.notebookId,
+            };
+          }
+        }
+      } catch (_) {}
+
+      // 2. 尝试从 editor.getActiveNoteId() 获取
+      try {
+        if (context.editor?.getActiveNoteId && context.notes?.get) {
+          const id = await context.editor.getActiveNoteId();
+          if (id) {
+            const full = await context.notes.get(id);
+            if (full) {
+              return {
+                id,
+                noteId: id,
+                title: full.title || "未命名画布",
+                contentMarkdown: full.contentMarkdown || full.content || "",
+                content: full.content || full.contentMarkdown || "",
+                tags: full.tags || [],
+                notebookId: full.notebookId,
+              };
+            }
+          }
+        }
+      } catch (_) {}
+
+      // 3. 尝试从 workspace.getActiveNote() 获取
+      try {
+        if (context.workspace?.getActiveNote) {
+          const full = await context.workspace.getActiveNote();
+          if (full) {
+            const id = full.id || full.noteId;
+            return {
+              id,
+              noteId: id,
+              title: full.title || "未命名画布",
+              contentMarkdown: full.contentMarkdown || full.content || "",
+              content: full.content || full.contentMarkdown || "",
+              tags: full.tags || [],
+              notebookId: full.notebookId,
+            };
+          }
+        }
+      } catch (_) {}
+
+      return null;
+    }
+
+    /**
+     * DOM 级双重嗅探：当 API 尚未准备就绪或返回正文延迟时，直接从渲染 DOM 提取画布数据
+     */
+    function sniffCanvasFromDOM() {
+      // A. 嗅探包含 elements 与 viewport 的代码块
+      const codeBlocks = document.querySelectorAll("pre, code, [class*='code'], .ProseMirror pre, .milkdown pre");
+      for (const block of codeBlocks) {
+        const text = block.textContent || "";
+        if (text.includes('"elements"') && (text.includes('"viewport"') || text.includes('"version"'))) {
+          try {
+            const parsed = JSON.parse(text.trim());
+            if (parsed && Array.isArray(parsed.elements)) {
+              return { isCanvas: true, data: parsed, blockEl: block };
+            }
+          } catch (_) {
+            const match = text.match(/\{[\s\S]*"elements"[\s\S]*\}/);
+            if (match) {
+              try {
+                const parsed = JSON.parse(match[0]);
+                if (parsed && Array.isArray(parsed.elements)) {
+                  return { isCanvas: true, data: parsed, blockEl: block };
+                }
+              } catch (_) {}
+            }
+          }
+        }
+      }
+
+      // B. 嗅探主编辑器容器
+      const contentEl = findEditorContentContainer();
+      if (contentEl) {
+        const text = contentEl.textContent || "";
+        if (text.includes("canvas-board") || (text.includes('"elements"') && text.includes('"viewport"'))) {
+          const match = text.match(/```canvas-board\s*([\s\S]*?)```/i) || text.match(/\{[\s\S]*"elements"[\s\S]*\}/);
+          if (match) {
+            try {
+              const raw = match[1] || match[0];
+              const parsed = JSON.parse(raw.trim());
+              if (parsed && Array.isArray(parsed.elements)) {
+                return { isCanvas: true, data: parsed, blockEl: null };
+              }
+            } catch (_) {}
+          }
+          return { isCanvas: true, data: null, blockEl: null };
+        }
+      }
+
+      // C. 嗅探标签栏或标题
+      const pageText = document.body.textContent || "";
+      if (pageText.includes("#画布") && (pageText.includes('"elements"') || pageText.includes("canvas-board"))) {
+        return { isCanvas: true, data: null, blockEl: null };
+      }
+
+      return null;
+    }
+
+    function isCanvasNote(note, domSniff = null) {
+      if (domSniff && domSniff.isCanvas) return true;
       if (!note) return false;
       const content = note.contentMarkdown || note.content || "";
       if (CANVAS_CODEBLOCK_REGEX.test(content)) return true;
+      if (content.includes("canvas-board") || (content.includes('"elements"') && content.includes('"viewport"'))) return true;
       if (Array.isArray(note.tags) && (note.tags.includes("画布") || note.tags.includes("canvas"))) return true;
       if (note.title && (note.title.includes("画布") || note.title.includes("Whiteboard"))) return true;
       return false;
     }
 
-    function parseCanvasData(content) {
-      const match = content.match(CANVAS_CODEBLOCK_REGEX);
+    function parseCanvasData(content, domSniff = null) {
+      if (domSniff && domSniff.data) {
+        return domSniff.data;
+      }
+
+      const match = (content || "").match(CANVAS_CODEBLOCK_REGEX);
       if (match && match[1]) {
         try {
           const data = JSON.parse(match[1].trim());
+          if (data && Array.isArray(data.elements)) {
+            return data;
+          }
+        } catch (_) {}
+      }
+
+      // 尝试直接提取 JSON
+      const jsonMatch = (content || "").match(/\{[\s\S]*"elements"[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          const data = JSON.parse(jsonMatch[0].trim());
           if (data && Array.isArray(data.elements)) {
             return data;
           }
@@ -238,6 +383,10 @@ export default {
         }
 
         if (createdNote?.id) {
+          currentNote = createdNote;
+          canvasData = initialData;
+          activeViewMode = "canvas";
+
           if (context.editor?.openDocument) {
             await context.editor.openDocument({ noteId: createdNote.id });
           } else if (context.ui?.openNote) {
@@ -246,6 +395,11 @@ export default {
           if (context.ui?.showNotice) {
             context.ui.showNotice("🎨 已成功创建无限画布笔记！", { type: "success" });
           }
+
+          // 立即主动触发多次挂载探测，确保瞬间切入画布视图，防止显示原生 raw JSON
+          setTimeout(() => checkAndMountCanvasBoard(true), 80);
+          setTimeout(() => checkAndMountCanvasBoard(true), 250);
+          setTimeout(() => checkAndMountCanvasBoard(true), 600);
         }
       } catch (err) {
         console.warn("[Canvas Board] 创建画布笔记失败:", err);
@@ -384,50 +538,100 @@ export default {
       return null;
     }
 
-    async function checkAndMountCanvasBoard() {
-      // 获取当前活跃笔记
-      try {
-        if (context.editor?.getDocument) {
-          const doc = await context.editor.getDocument();
-          if (doc) currentNote = doc;
-        }
-      } catch (_) {}
+    async function checkAndMountCanvasBoard(force = false) {
+      // 1. 尝试从 API 解析当前笔记
+      const note = await resolveCurrentNote();
+      // 2. DOM 级特征嗅探
+      const domSniff = sniffCanvasFromDOM();
 
-      if (!currentNote || !isCanvasNote(currentNote)) {
+      const isCanvas = isCanvasNote(note, domSniff);
+
+      if (!isCanvas) {
         if (canvasContainerEl) {
           canvasContainerEl.remove();
           canvasContainerEl = null;
         }
+        const contentEl = findEditorContentContainer();
+        if (contentEl) contentEl.style.display = "";
+        document.querySelector(".edgeever-cb-source-float-btn")?.remove();
         return;
       }
 
-      const contentParent = findEditorContentContainer();
-      if (!contentParent) return;
+      currentNote = note || { id: "current_canvas", title: "未命名画布", tags: ["画布"] };
 
-      // 确保父容器具备相对定位
-      const parentWrap = contentParent.parentElement || contentParent;
+      const contentEl = findEditorContentContainer();
+      if (!contentEl) return;
+
+      const parentWrap = contentEl.parentElement || contentEl;
       if (getComputedStyle(parentWrap).position === "static") {
         parentWrap.style.position = "relative";
       }
+      parentWrap.style.minHeight = "600px";
 
-      if (canvasContainerEl && canvasContainerEl.isConnected) {
-        if (canvasContainerEl.dataset.noteId === String(currentNote.id || currentNote.noteId)) {
-          return; // 已挂载且为同一笔记
+      const currentId = String(currentNote.id || currentNote.noteId || "canvas_board");
+
+      if (!force && canvasContainerEl && canvasContainerEl.isConnected) {
+        if (canvasContainerEl.dataset.noteId === currentId) {
+          if (activeViewMode === "canvas") {
+            contentEl.style.display = "none";
+            canvasContainerEl.style.display = "flex";
+          }
+          return;
         }
         canvasContainerEl.remove();
       }
 
-      // 初始化画布数据
+      // 初始化画布数据 (优先使用 DOM 嗅探出的高鲜度数据)
       const rawContent = currentNote.contentMarkdown || currentNote.content || "";
-      canvasData = parseCanvasData(rawContent);
+      canvasData = parseCanvasData(rawContent, domSniff);
 
-      mountCanvasUI(parentWrap);
+      mountCanvasUI(parentWrap, contentEl);
     }
 
-    function mountCanvasUI(container) {
+    function createSourceFloatButton(parentWrap, contentEl) {
+      document.querySelector(".edgeever-cb-source-float-btn")?.remove();
+      const floatBtn = document.createElement("button");
+      floatBtn.type = "button";
+      floatBtn.className = "edgeever-cb-source-float-btn";
+      floatBtn.innerHTML = `${ICONS.canvas} 切换为画布视图`;
+      floatBtn.title = "点击从 Markdown 源码切回可视化无限白板";
+
+      floatBtn.onclick = () => {
+        activeViewMode = "canvas";
+        floatBtn.remove();
+        if (contentEl) contentEl.style.display = "none";
+        if (canvasContainerEl) {
+          canvasContainerEl.style.display = "flex";
+          const sniff = sniffCanvasFromDOM();
+          if (sniff?.data) {
+            canvasData = sniff.data;
+            renderElements();
+          }
+        } else {
+          checkAndMountCanvasBoard(true);
+        }
+      };
+
+      parentWrap.appendChild(floatBtn);
+    }
+
+    function mountCanvasUI(parentWrap, contentEl) {
+      document.querySelector(".edgeever-cb-source-float-btn")?.remove();
+
+      // 在画布视图模式下，完全隐藏底层的原生 Markdown 编辑器，防止 JSON 字符串透出
+      if (activeViewMode === "canvas") {
+        contentEl.style.display = "none";
+      } else {
+        contentEl.style.display = "";
+      }
+
       canvasContainerEl = document.createElement("div");
       canvasContainerEl.className = "edgeever-canvas-board-container";
       canvasContainerEl.dataset.noteId = String(currentNote.id || currentNote.noteId || "");
+      if (activeViewMode !== "canvas") {
+        canvasContainerEl.style.display = "none";
+        createSourceFloatButton(parentWrap, contentEl);
+      }
 
       canvasContainerEl.innerHTML = `
         <!-- 背景点阵网格 -->
@@ -476,15 +680,15 @@ export default {
         </div>
       `;
 
-      container.appendChild(canvasContainerEl);
+      parentWrap.appendChild(canvasContainerEl);
 
-      setupCanvasEvents(canvasContainerEl);
+      setupCanvasEvents(canvasContainerEl, contentEl, parentWrap);
       renderElements();
     }
 
     // ==================== 7. 画布交互引擎与事件绑定 ====================
 
-    function setupCanvasEvents(root) {
+    function setupCanvasEvents(root, contentEl, parentWrap) {
       const stage = root.querySelector(".edgeever-cb-stage");
       const grid = root.querySelector(".edgeever-cb-grid-layer");
       const zoomValEl = root.querySelector(".edgeever-cb-zoom-val");
@@ -617,12 +821,24 @@ export default {
 
       // 视图切换
       root.querySelector(".btn-view-code").onclick = () => {
+        activeViewMode = "code";
         if (canvasContainerEl) canvasContainerEl.style.display = "none";
-        const contentEl = findEditorContentContainer();
-        if (contentEl) contentEl.style.display = "block";
+        if (contentEl) contentEl.style.display = "";
+        createSourceFloatButton(parentWrap, contentEl);
       };
       root.querySelector(".btn-view-canvas").onclick = () => {
-        if (canvasContainerEl) canvasContainerEl.style.display = "flex";
+        activeViewMode = "canvas";
+        document.querySelector(".edgeever-cb-source-float-btn")?.remove();
+        if (contentEl) contentEl.style.display = "none";
+        if (canvasContainerEl) {
+          canvasContainerEl.style.display = "flex";
+          // 重新从 DOM 提取在源码模式下可能更改的 JSON
+          const sniff = sniffCanvasFromDOM();
+          if (sniff?.data) {
+            canvasData = sniff.data;
+            renderElements();
+          }
+        }
       };
 
       updateViewportTransform();
@@ -1050,6 +1266,9 @@ export default {
     return () => {
       observer.disconnect();
       if (canvasContainerEl) canvasContainerEl.remove();
+      document.querySelector(".edgeever-cb-source-float-btn")?.remove();
+      const contentEl = findEditorContentContainer();
+      if (contentEl) contentEl.style.display = "";
       document.querySelectorAll(".edgeever-cb-menu-item").forEach((el) => el.remove());
       document.querySelectorAll(".edgeever-cb-sidebar-btn").forEach((el) => el.remove());
       document.getElementById("edgeever-cb-dock-btn")?.remove();
@@ -1059,6 +1278,23 @@ export default {
   deactivate() {
     if (typeof window !== "undefined") {
       document.querySelector(".edgeever-canvas-board-container")?.remove();
+      document.querySelector(".edgeever-cb-source-float-btn")?.remove();
+      const selectors = [
+        ".ProseMirror",
+        ".milkdown",
+        ".markdown-body",
+        ".editor-content",
+        ".memo-content",
+        ".note-content",
+        ".edgeever-preview-markdown",
+        ".edgeever-workspace-editor .content",
+        ".edgeever-workspace-editor [class*='content']",
+        "article",
+      ];
+      for (const sel of selectors) {
+        const el = document.querySelector(sel);
+        if (el) el.style.display = "";
+      }
       document.querySelectorAll(".edgeever-cb-menu-item").forEach((el) => el.remove());
       document.querySelectorAll(".edgeever-cb-sidebar-btn").forEach((el) => el.remove());
       document.getElementById("edgeever-cb-dock-btn")?.remove();
