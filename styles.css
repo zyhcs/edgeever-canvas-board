@@ -351,10 +351,11 @@ body.theme-light, [data-theme="light"] {
   pointer-events: none;
   overflow: visible;
   z-index: 2;
+  transform-origin: 0 0;
 }
 
-.edgeever-cb-svg-layer path {
-  pointer-events: stroke;
+.edgeever-cb-svg-layer g {
+  pointer-events: auto;
 }
 
 /* 舞台容器 (包含所有节点卡片) */
@@ -366,6 +367,17 @@ body.theme-light, [data-theme="light"] {
   transform-origin: 0 0;
   cursor: default;
   z-index: 3;
+  pointer-events: none;
+}
+
+.edgeever-cb-stage > * {
+  pointer-events: auto;
+}
+
+/* 绘图模式下，下层图元全穿透，保证拖拽画框 100% 毫无阻碍 */
+.edgeever-cb-viewport.is-drawing-mode .edgeever-cb-svg-layer g,
+.edgeever-cb-viewport.is-drawing-mode .edgeever-cb-stage > * {
+  pointer-events: none !important;
 }
 
 .edgeever-cb-stage.is-panning {

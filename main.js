@@ -952,12 +952,13 @@ export default {
           g.appendChild(selBox);
         }
 
-        g.style.pointerEvents = "all";
+        g.style.pointerEvents = activeTool === "select" ? "all" : "none";
         g.addEventListener("mousedown", (e) => {
           if (activeTool === "eraser") return;
-          e.stopPropagation();
+          if (activeTool !== "select") return;
           selectedElementId = el.id;
           renderAll();
+          updateInspector(true);
         });
 
         svgLayer.appendChild(g);
@@ -984,10 +985,13 @@ export default {
           node.classList.add("is-selected");
         }
 
+        node.style.pointerEvents = activeTool === "select" ? "auto" : "none";
         node.addEventListener("mousedown", (e) => {
           if (activeTool === "eraser") return;
+          if (activeTool !== "select") return;
           selectedElementId = el.id;
           renderAll();
+          updateInspector(true);
         });
 
         if (el.type === "card") {
@@ -1411,23 +1415,53 @@ export default {
         }
       }
 
-      // 工具栏点击联动
+      // 统一切换画板工具与状态指引
+      function setTool(tool) {
+        activeTool = tool;
+        root.querySelectorAll(".edgeever-cb-tool-btn[data-tool]").forEach((b) => {
+          b.classList.toggle("is-active", b.dataset.tool === tool);
+        });
+
+        if (tool !== "select") {
+          selectedElementId = null;
+          viewportEl?.classList.add("is-drawing-mode");
+          if (viewportEl) {
+            viewportEl.style.cursor = tool === "eraser" ? "not-allowed" : "crosshair";
+          }
+        } else {
+          viewportEl?.classList.remove("is-drawing-mode");
+          if (viewportEl) {
+            viewportEl.style.cursor = "";
+          }
+        }
+
+        updateHintPill();
+        renderAll();
+      }
+
+      function updateHintPill() {
+        const pill = viewportEl?.querySelector(".edgeever-cb-hint-pill");
+        if (!pill) return;
+        const hints = {
+          select: "<kbd>空格</kbd> 拖拽平移 <kbd>Ctrl+滚轮</kbd> 缩放 <kbd>Del</kbd> 删除",
+          freedraw: "🎨 <b>画笔就绪</b>：在画布上按住鼠标任意涂鸦",
+          eraser: "🧹 <b>橡皮擦就绪</b>：点击画布上的组件进行删除",
+          rect: "⬜ <b>矩形就绪</b>：在画布上拖拽绘制，或点击快速放置",
+          diamond: "◇ <b>菱形就绪</b>：在画布上拖拽绘制，或点击快速放置",
+          circle: "⭕ <b>圆形就绪</b>：在画布上拖拽绘制椭圆，或点击快速放置",
+          arrow: "➔ <b>箭头连线就绪</b>：在画布上按住鼠标拖拽连线",
+          line: "╱ <b>线条就绪</b>：在画布上按住鼠标拖拽画线",
+          text: "🔤 <b>文本工具就绪</b>：在画布任意位置点击输入文本",
+          card: "📝 <b>便签卡片就绪</b>：在画布任意位置点击创建架构便签",
+        };
+        pill.innerHTML = hints[activeTool] || hints.select;
+      }
+
+      // 工具栏点击联动：点击任何工具，直接激活该工具的绘制/放置模式
       root.querySelectorAll(".edgeever-cb-tool-btn[data-tool]").forEach((btn) => {
         btn.onclick = () => {
           const tool = btn.dataset.tool;
-
-          if (tool === "select" || tool === "freedraw" || tool === "eraser") {
-            root.querySelectorAll(".edgeever-cb-tool-btn[data-tool]").forEach((b) => b.classList.remove("is-active"));
-            btn.classList.add("is-active");
-            activeTool = tool;
-            if (activeTool !== "select") {
-              selectedElementId = null;
-              renderAll();
-            }
-          } else {
-            // 点击任何形状/文本/卡片按钮，立即在画布视口中心生成一个组件并高亮选中！
-            addNewElementToCenter(tool);
-          }
+          setTool(tool);
         };
       });
 
@@ -1561,6 +1595,26 @@ export default {
           e.preventDefault();
           redo();
         }
+
+        // Excalidraw 原生单键快捷切换工具
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+          const keyMap = {
+            KeyV: "select",
+            KeyP: "freedraw",
+            KeyE: "eraser",
+            KeyR: "rect",
+            KeyD: "diamond",
+            KeyC: "circle",
+            KeyA: "arrow",
+            KeyL: "line",
+            KeyT: "text",
+            KeyN: "card",
+          };
+          if (keyMap[e.code]) {
+            e.preventDefault();
+            setTool(keyMap[e.code]);
+          }
+        }
       });
 
       window.addEventListener("keyup", (e) => {
@@ -1570,7 +1624,7 @@ export default {
         }
       });
 
-      // 鼠标按下：开始平移或绘制
+      // 鼠标按下：开始平移、选中拖拽或图元绘制/放置
       viewportEl.addEventListener("mousedown", (e) => {
         if (e.target.matches("input, textarea, [contenteditable='true']")) return;
 
@@ -1597,17 +1651,17 @@ export default {
           return;
         }
 
-        // 选择模式
+        // 选择模式：拖拽移动元素或点击空白取消选中
         if (activeTool === "select") {
           const clickedTarget = e.target.closest("[data-id]");
           if (clickedTarget && clickedTarget.dataset.id) {
             selectedElementId = clickedTarget.dataset.id;
             renderAll();
-            // 开始拖拽移动该元素
+            updateInspector(true);
             isDrawing = true;
             currentDrawingElement = canvasData.elements.find((el) => el.id === selectedElementId);
-            startX = p.x - (currentDrawingElement.x || currentDrawingElement.x1 || 0);
-            startY = p.y - (currentDrawingElement.y || currentDrawingElement.y1 || 0);
+            startX = p.x - (currentDrawingElement.x ?? currentDrawingElement.x1 ?? 0);
+            startY = p.y - (currentDrawingElement.y ?? currentDrawingElement.y1 ?? 0);
           } else {
             selectedElementId = null;
             renderAll();
@@ -1615,9 +1669,11 @@ export default {
           return;
         }
 
-        // 绘图工具启动
+        // 绘图与组件放置模式
         pushHistory();
         isDrawing = true;
+        startX = p.x;
+        startY = p.y;
 
         if (activeTool === "freedraw") {
           currentDrawingElement = {
@@ -1628,14 +1684,15 @@ export default {
             strokeWidth: currentStyle.strokeWidth,
           };
           canvasData.elements.push(currentDrawingElement);
+          renderSVGElements();
         } else if (activeTool === "rect" || activeTool === "diamond" || activeTool === "circle") {
           currentDrawingElement = {
             id: generateId(activeTool),
             type: activeTool,
             x: p.x,
             y: p.y,
-            w: 10,
-            h: 10,
+            w: 1,
+            h: 1,
             strokeColor: currentStyle.strokeColor,
             backgroundColor: currentStyle.backgroundColor,
             fillStyle: currentStyle.fillStyle,
@@ -1643,61 +1700,31 @@ export default {
             roughness: currentStyle.roughness,
           };
           canvasData.elements.push(currentDrawingElement);
+          renderSVGElements();
         } else if (activeTool === "arrow" || activeTool === "line") {
           currentDrawingElement = {
             id: generateId(activeTool),
             type: activeTool,
             x1: p.x,
             y1: p.y,
-            x2: p.x + 10,
-            y2: p.y + 10,
-            strokeColor: currentStyle.strokeColor,
+            x2: p.x,
+            y2: p.y,
+            strokeColor: currentStyle.strokeColor === "#1e1e1e" && activeTool === "arrow" ? "#3b82f6" : currentStyle.strokeColor,
             strokeWidth: currentStyle.strokeWidth,
             roughness: currentStyle.roughness,
           };
           canvasData.elements.push(currentDrawingElement);
-        } else if (activeTool === "card") {
-          const newCard = {
-            id: generateId("card"),
-            type: "card",
-            x: p.x,
-            y: p.y,
-            w: 220,
-            h: 110,
-            title: "新便签",
-            content: "双击编辑内容...",
-            strokeColor: currentStyle.strokeColor === "#1e1e1e" ? "#2563eb" : currentStyle.strokeColor,
-            backgroundColor: currentStyle.backgroundColor === "transparent" ? "#dbeafe" : currentStyle.backgroundColor,
+          renderSVGElements();
+        } else if (activeTool === "card" || activeTool === "text") {
+          currentDrawingElement = {
+            type: activeTool,
+            startX: p.x,
+            startY: p.y,
           };
-          canvasData.elements.push(newCard);
-          selectedElementId = newCard.id;
-          activeTool = "select";
-          root.querySelector(".edgeever-cb-tool-btn[data-tool='select']").click();
-          renderAll();
-          scheduleAutoSave();
-          isDrawing = false;
-        } else if (activeTool === "text") {
-          const newText = {
-            id: generateId("text"),
-            type: "text",
-            x: p.x,
-            y: p.y,
-            w: 160,
-            h: 36,
-            text: "双击输入文本",
-            strokeColor: currentStyle.strokeColor,
-          };
-          canvasData.elements.push(newText);
-          selectedElementId = newText.id;
-          activeTool = "select";
-          root.querySelector(".edgeever-cb-tool-btn[data-tool='select']").click();
-          renderAll();
-          scheduleAutoSave();
-          isDrawing = false;
         }
       });
 
-      // 鼠标移动
+      // 鼠标移动：支持任意象限全向自由拖拽
       window.addEventListener("mousemove", (e) => {
         if (isPanning) {
           canvasData.viewport.x = e.clientX - startX;
@@ -1711,7 +1738,6 @@ export default {
         const p = getCanvasPoint(e.clientX, e.clientY);
 
         if (activeTool === "select" && selectedElementId) {
-          // 移动选中元素
           if (currentDrawingElement.type === "arrow" || currentDrawingElement.type === "line") {
             const dx = p.x - startX - currentDrawingElement.x1;
             const dy = p.y - startY - currentDrawingElement.y1;
@@ -1728,8 +1754,10 @@ export default {
           currentDrawingElement.points.push([p.x, p.y]);
           renderSVGElements();
         } else if (activeTool === "rect" || activeTool === "diamond" || activeTool === "circle") {
-          currentDrawingElement.w = Math.max(10, p.x - currentDrawingElement.x);
-          currentDrawingElement.h = Math.max(10, p.y - currentDrawingElement.y);
+          currentDrawingElement.x = Math.min(startX, p.x);
+          currentDrawingElement.y = Math.min(startY, p.y);
+          currentDrawingElement.w = Math.max(2, Math.abs(p.x - startX));
+          currentDrawingElement.h = Math.max(2, Math.abs(p.y - startY));
           renderSVGElements();
         } else if (activeTool === "arrow" || activeTool === "line") {
           currentDrawingElement.x2 = p.x;
@@ -1738,8 +1766,8 @@ export default {
         }
       });
 
-      // 鼠标释放
-      window.addEventListener("mouseup", () => {
+      // 鼠标释放：支持拖拽生成与单击快速放置，自动高亮选中并回归选择模式
+      window.addEventListener("mouseup", (e) => {
         if (isPanning) {
           isPanning = false;
           viewportEl.style.cursor = "";
@@ -1747,6 +1775,76 @@ export default {
         }
 
         if (isDrawing) {
+          const p = getCanvasPoint(e.clientX, e.clientY);
+          const dist = Math.hypot(p.x - startX, p.y - startY);
+
+          if (activeTool === "rect" || activeTool === "diamond" || activeTool === "circle") {
+            if (dist < 8) {
+              const defaultSizes = {
+                rect: { w: 180, h: 100 },
+                diamond: { w: 140, h: 100 },
+                circle: { w: 120, h: 120 },
+              };
+              const sz = defaultSizes[activeTool] || { w: 160, h: 100 };
+              currentDrawingElement.w = sz.w;
+              currentDrawingElement.h = sz.h;
+              currentDrawingElement.x = Math.round(p.x - sz.w / 2);
+              currentDrawingElement.y = Math.round(p.y - sz.h / 2);
+            } else {
+              currentDrawingElement.w = Math.max(20, currentDrawingElement.w);
+              currentDrawingElement.h = Math.max(20, currentDrawingElement.h);
+            }
+            selectedElementId = currentDrawingElement.id;
+            setTool("select");
+            updateInspector(true);
+          } else if (activeTool === "arrow" || activeTool === "line") {
+            if (dist < 8) {
+              currentDrawingElement.x1 = Math.round(p.x - 70);
+              currentDrawingElement.y1 = Math.round(p.y);
+              currentDrawingElement.x2 = Math.round(p.x + 70);
+              currentDrawingElement.y2 = Math.round(p.y);
+            }
+            selectedElementId = currentDrawingElement.id;
+            setTool("select");
+            updateInspector(true);
+          } else if (activeTool === "card") {
+            const w = dist < 8 ? 220 : Math.max(160, Math.abs(p.x - startX));
+            const h = dist < 8 ? 110 : Math.max(80, Math.abs(p.y - startY));
+            const x = dist < 8 ? Math.round(p.x - 110) : Math.min(startX, p.x);
+            const y = dist < 8 ? Math.round(p.y - 55) : Math.min(startY, p.y);
+            const newCard = {
+              id: generateId("card"),
+              type: "card",
+              x,
+              y,
+              w,
+              h,
+              title: "新架构便签",
+              content: "双击编辑内容...",
+              strokeColor: currentStyle.strokeColor === "#1e1e1e" ? "#2563eb" : currentStyle.strokeColor,
+              backgroundColor: currentStyle.backgroundColor === "transparent" ? "#dbeafe" : currentStyle.backgroundColor,
+            };
+            canvasData.elements.push(newCard);
+            selectedElementId = newCard.id;
+            setTool("select");
+            updateInspector(true);
+          } else if (activeTool === "text") {
+            const newText = {
+              id: generateId("text"),
+              type: "text",
+              x: Math.round(p.x),
+              y: Math.round(p.y - 18),
+              w: 160,
+              h: 36,
+              text: "双击输入文本",
+              strokeColor: currentStyle.strokeColor,
+            };
+            canvasData.elements.push(newText);
+            selectedElementId = newText.id;
+            setTool("select");
+            updateInspector(true);
+          }
+
           isDrawing = false;
           currentDrawingElement = null;
           renderAll();
