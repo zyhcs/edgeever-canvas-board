@@ -1,0 +1,25 @@
+{
+  "name": "edgeever-canvas-board",
+  "version": "1.0.0",
+  "description": "Infinite canvas & visual whiteboard plugin for EdgeEver: Native new note type integration, draggable note cards, sticky notes, flowchart shapes, smart connectors, freehand doodles, and 100% offline auto-persistence.",
+  "main": "main.js",
+  "scripts": {
+    "test": "node -c main.js"
+  },
+  "keywords": [
+    "edgeever",
+    "edgeever-plugin",
+    "infinite-canvas",
+    "whiteboard",
+    "excalidraw",
+    "tldraw",
+    "mindmap",
+    "visual-pkm"
+  ],
+  "author": "zyhcs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zyhcs/edgeever-canvas-board.git"
+  }
+}

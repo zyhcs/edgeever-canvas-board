@@ -1,0 +1,477 @@
+/* ==========================================================================
+   EdgeEver Canvas Board - 无限白板与架构画布样式系统
+   适配深色与浅色模式 | 苹果/tldraw 级极简美学质感
+   ========================================================================== */
+
+:root {
+  --ee-cb-primary: #3b82f6;
+  --ee-cb-primary-hover: #2563eb;
+  --ee-cb-primary-light: rgba(59, 130, 246, 0.15);
+  --ee-cb-surface: rgba(22, 27, 34, 0.88);
+  --ee-cb-surface-elevated: #1c2128;
+  --ee-cb-border: rgba(255, 255, 255, 0.1);
+  --ee-cb-border-hover: rgba(255, 255, 255, 0.22);
+  --ee-cb-text: #e6edf3;
+  --ee-cb-text-muted: #8b949e;
+  --ee-cb-grid-dot: rgba(255, 255, 255, 0.12);
+  --ee-cb-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+  --ee-cb-shadow-sm: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --ee-cb-primary: #2563eb;
+    --ee-cb-primary-hover: #1d4ed8;
+    --ee-cb-primary-light: rgba(37, 99, 235, 0.1);
+    --ee-cb-surface: rgba(255, 255, 255, 0.92);
+    --ee-cb-surface-elevated: #ffffff;
+    --ee-cb-border: rgba(0, 0, 0, 0.1);
+    --ee-cb-border-hover: rgba(0, 0, 0, 0.22);
+    --ee-cb-text: #1f2937;
+    --ee-cb-text-muted: #6b7280;
+    --ee-cb-grid-dot: rgba(0, 0, 0, 0.12);
+    --ee-cb-shadow: 0 12px 36px rgba(0, 0, 0, 0.1);
+    --ee-cb-shadow-sm: 0 4px 14px rgba(0, 0, 0, 0.06);
+  }
+}
+
+body.theme-light, [data-theme="light"] {
+  --ee-cb-primary: #2563eb;
+  --ee-cb-primary-hover: #1d4ed8;
+  --ee-cb-primary-light: rgba(37, 99, 235, 0.1);
+  --ee-cb-surface: rgba(255, 255, 255, 0.92);
+  --ee-cb-surface-elevated: #ffffff;
+  --ee-cb-border: rgba(0, 0, 0, 0.1);
+  --ee-cb-border-hover: rgba(0, 0, 0, 0.22);
+  --ee-cb-text: #1f2937;
+  --ee-cb-text-muted: #6b7280;
+  --ee-cb-grid-dot: rgba(0, 0, 0, 0.12);
+  --ee-cb-shadow: 0 12px 36px rgba(0, 0, 0, 0.1);
+  --ee-cb-shadow-sm: 0 4px 14px rgba(0, 0, 0, 0.06);
+}
+
+/* ==========================================================================
+   1. 菜单项注入与侧边栏快捷微入口
+   ========================================================================== */
+.edgeever-cb-menu-item {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 8px 12px !important;
+  font-size: 13px !important;
+  color: var(--ee-cb-text) !important;
+  cursor: pointer !important;
+  border-radius: 6px !important;
+  transition: all 0.12s ease !important;
+  user-select: none !important;
+}
+
+.edgeever-cb-menu-item:hover {
+  background: var(--ee-cb-primary-light) !important;
+  color: var(--ee-cb-primary) !important;
+}
+
+.edgeever-cb-menu-item svg {
+  width: 16px;
+  height: 16px;
+  color: var(--ee-cb-primary);
+  flex-shrink: 0;
+}
+
+/* 侧边栏常驻快捷微按钮 */
+.edgeever-cb-sidebar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--ee-cb-border);
+  background: var(--ee-cb-surface-elevated);
+  color: var(--ee-cb-text-muted);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.edgeever-cb-sidebar-btn:hover {
+  border-color: var(--ee-cb-primary);
+  color: var(--ee-cb-primary);
+  background: var(--ee-cb-primary-light);
+}
+
+.edgeever-cb-sidebar-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* ==========================================================================
+   2. 无限画布视口核心容器 (Infinite Canvas Viewport)
+   ========================================================================== */
+.edgeever-canvas-board-container {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  user-select: none;
+  background-color: transparent;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 点阵背景图层 */
+.edgeever-cb-grid-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  background-size: 24px 24px;
+  background-image: radial-gradient(circle, var(--ee-cb-grid-dot) 1.2px, transparent 1.2px);
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+
+.edgeever-cb-grid-layer.style-lines {
+  background-image:
+    linear-gradient(to right, var(--ee-cb-grid-dot) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--ee-cb-grid-dot) 1px, transparent 1px);
+}
+
+.edgeever-cb-grid-layer.style-blank {
+  background-image: none !important;
+}
+
+/* SVG 连线与矢量图层 */
+.edgeever-cb-svg-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 2;
+}
+
+.edgeever-cb-svg-layer path {
+  pointer-events: stroke;
+}
+
+/* 舞台容器 (包含所有节点卡片) */
+.edgeever-cb-stage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 0;
+  cursor: default;
+  z-index: 3;
+}
+
+.edgeever-cb-stage.is-panning {
+  cursor: grab;
+}
+
+.edgeever-cb-stage.is-panning-active {
+  cursor: grabbing;
+}
+
+/* ==========================================================================
+   3. 浮动现代化中控工具栏 (Floating Action Toolbar)
+   ========================================================================== */
+.edgeever-cb-toolbar {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  border-radius: 30px;
+  background: var(--ee-cb-surface);
+  border: 1px solid var(--ee-cb-border);
+  box-shadow: var(--ee-cb-shadow);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  user-select: none;
+  transition: all 0.2s ease;
+}
+
+.edgeever-cb-tool-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--ee-cb-text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.edgeever-cb-tool-btn:hover {
+  background: var(--ee-cb-primary-light);
+  color: var(--ee-cb-primary);
+  transform: translateY(-1px);
+}
+
+.edgeever-cb-tool-btn.is-active {
+  background: var(--ee-cb-primary);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+}
+
+.edgeever-cb-tool-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.edgeever-cb-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--ee-cb-border);
+  margin: 0 4px;
+}
+
+/* 视口缩放与状态信息浮岛 */
+.edgeever-cb-status-bar {
+  position: absolute;
+  bottom: 18px;
+  left: 20px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: var(--ee-cb-surface);
+  border: 1px solid var(--ee-cb-border);
+  box-shadow: var(--ee-cb-shadow-sm);
+  backdrop-filter: blur(16px);
+  font-size: 11.5px;
+  color: var(--ee-cb-text-muted);
+}
+
+.edgeever-cb-zoom-btn {
+  background: transparent;
+  border: none;
+  color: var(--ee-cb-text-muted);
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.edgeever-cb-zoom-btn:hover {
+  color: var(--ee-cb-primary);
+  background: var(--ee-cb-primary-light);
+}
+
+.edgeever-cb-zoom-val {
+  min-width: 42px;
+  text-align: center;
+  font-weight: 600;
+  color: var(--ee-cb-text);
+}
+
+.edgeever-cb-save-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #10b981;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* 右上角模式切换胶囊 (画布 / 源码) */
+.edgeever-cb-view-switch {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  background: var(--ee-cb-surface);
+  border: 1px solid var(--ee-cb-border);
+  border-radius: 20px;
+  padding: 3px;
+  box-shadow: var(--ee-cb-shadow-sm);
+  backdrop-filter: blur(16px);
+}
+
+.edgeever-cb-switch-btn {
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+  border-radius: 14px;
+  border: none;
+  background: transparent;
+  color: var(--ee-cb-text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.edgeever-cb-switch-btn.is-active {
+  background: var(--ee-cb-primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   4. 画布元素系统 (Cards, Shapes, Connectors)
+   ========================================================================== */
+.edgeever-cb-element {
+  position: absolute;
+  cursor: move;
+  border-radius: 10px;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  box-sizing: border-box;
+}
+
+.edgeever-cb-element.is-selected {
+  outline: 2px solid var(--ee-cb-primary);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2), var(--ee-cb-shadow-sm) !important;
+}
+
+/* 便签卡片 */
+.edgeever-cb-card {
+  padding: 12px 14px;
+  background: var(--ee-cb-surface-elevated);
+  border: 1px solid var(--ee-cb-border);
+  box-shadow: var(--ee-cb-shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 160px;
+  min-height: 90px;
+  border-left-width: 5px !important;
+}
+
+.edgeever-cb-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ee-cb-text);
+  outline: none;
+  line-height: 1.4;
+}
+
+.edgeever-cb-card-body {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ee-cb-text-muted);
+  outline: none;
+  flex: 1;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 颜色主题 */
+.edgeever-cb-card[data-color="blue"] { border-left-color: #3b82f6 !important; }
+.edgeever-cb-card[data-color="green"] { border-left-color: #10b981 !important; }
+.edgeever-cb-card[data-color="amber"] { border-left-color: #f59e0b !important; }
+.edgeever-cb-card[data-color="purple"] { border-left-color: #8b5cf6 !important; }
+.edgeever-cb-card[data-color="red"] { border-left-color: #ef4444 !important; }
+
+/* 几何形状 */
+.edgeever-cb-shape-rect {
+  border: 2px solid var(--ee-cb-primary);
+  background: var(--ee-cb-primary-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+}
+
+.edgeever-cb-shape-circle {
+  border: 2px solid #10b981;
+  background: rgba(16, 185, 129, 0.12);
+  border-radius: 50% !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+}
+
+.edgeever-cb-shape-diamond {
+  border: 2px solid #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+  transform: rotate(45deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.edgeever-cb-shape-diamond > * {
+  transform: rotate(-45deg);
+}
+
+.edgeever-cb-shape-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ee-cb-text);
+  text-align: center;
+  outline: none;
+}
+
+/* 独立文本框 */
+.edgeever-cb-text-node {
+  padding: 4px 8px;
+  font-size: 14px;
+  color: var(--ee-cb-text);
+  outline: none;
+  white-space: pre-wrap;
+  cursor: text;
+}
+
+/* 拖拽吸附锚点指示器 */
+.edgeever-cb-port {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ee-cb-primary);
+  border: 1px solid #ffffff;
+  display: none;
+  cursor: crosshair;
+  z-index: 10;
+  transform: translate(-50%, -50%);
+}
+
+.edgeever-cb-element:hover .edgeever-cb-port,
+.edgeever-cb-element.is-selected .edgeever-cb-port {
+  display: block;
+}
+
+.edgeever-cb-port.top { top: 0; left: 50%; }
+.edgeever-cb-port.right { top: 50%; left: 100%; }
+.edgeever-cb-port.bottom { top: 100%; left: 50%; }
+.edgeever-cb-port.left { top: 50%; left: 0; }
+
+/* 尺寸调节手柄 (Resize Handle) */
+.edgeever-cb-resize-handle {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--ee-cb-primary);
+  cursor: se-resize;
+  display: none;
+  z-index: 11;
+}
+
+.edgeever-cb-element.is-selected .edgeever-cb-resize-handle {
+  display: block;
+}

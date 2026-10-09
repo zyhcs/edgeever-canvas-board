@@ -1,0 +1,71 @@
+{
+  "type": "plugin",
+  "id": "org.edgeever.plugins.canvas-board",
+  "name": "Canvas Board: Infinite Whiteboard Suite",
+  "version": "1.0.0",
+  "apiVersion": "2",
+  "settingsUi": "host",
+  "description": "Infinite canvas & visual whiteboard plugin for EdgeEver: Native new note type integration in dropdown menu, draggable note cards, sticky notes, flowchart shapes, smart connectors, freehand doodles, and 100% offline auto-persistence.",
+  "locales": {
+    "zh-CN": {
+      "name": "Canvas Board: 无限白板与架构画布",
+      "description": "为 EdgeEver 带来原生的二维无限思维画布与架构白板。无缝集成至左侧边栏「更多类型 ▾」新建笔记菜单中，提供可缩放漫游的无限网格、富文本便签卡片、流程图形状、智能吸附连线、自由涂鸦以及一键导出高清图，数据 100% 离线静默自动保存至笔记。"
+    }
+  },
+  "author": "zyhcs",
+  "entry": "./main.js",
+  "platforms": ["web", "desktop"],
+  "permissions": [
+    "notes:read",
+    "notes:write",
+    "metadata:read",
+    "resources:read",
+    "editor:read",
+    "editor:write",
+    "ui:commands",
+    "ui:notices",
+    "storage"
+  ],
+  "settings": {
+    "fields": [
+      {
+        "key": "show_menu_item",
+        "type": "boolean",
+        "label": "在左侧「更多类型 ▾」下拉菜单中增加「🎨 无限画布」选项",
+        "default": true
+      },
+      {
+        "key": "show_sidebar_shortcut",
+        "type": "boolean",
+        "label": "在左侧新建按钮旁显示「🎨 新建画布」快捷微按钮",
+        "default": true
+      },
+      {
+        "key": "default_grid_style",
+        "type": "select",
+        "label": "画布背景网格风格",
+        "default": "dots",
+        "options": [
+          { "value": "dots", "label": "现代点阵 (Dots Grid - 推荐)" },
+          { "value": "lines", "label": "方格坐标纸 (Graph Paper)" },
+          { "value": "blank", "label": "纯净无网格 (Blank Clean)" }
+        ]
+      },
+      {
+        "key": "auto_save_delay",
+        "type": "number",
+        "label": "画布修改自动保存节流延时 (毫秒，默认 500ms)",
+        "default": 500,
+        "min": 200,
+        "max": 2000,
+        "step": 100
+      },
+      {
+        "key": "enable_dock_button",
+        "type": "boolean",
+        "label": "在右下角插件工具坞中显示快速新建/切换画布按钮",
+        "default": true
+      }
+    ]
+  }
+}
