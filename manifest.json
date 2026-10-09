@@ -2,7 +2,7 @@
   "type": "plugin",
   "id": "org.edgeever.plugins.canvas-board",
   "name": "Canvas Board: Infinite Whiteboard Suite",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "apiVersion": "2",
   "settingsUi": "host",
   "description": "Infinite canvas & visual whiteboard plugin for EdgeEver: Native new note type integration in dropdown menu, draggable note cards, sticky notes, flowchart shapes, smart connectors, freehand doodles, and 100% offline auto-persistence.",

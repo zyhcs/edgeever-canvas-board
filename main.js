@@ -96,7 +96,7 @@ export default {
             return {
               id: noteId,
               noteId: noteId,
-              title: doc.title || full?.title || "未命名画布",
+              title: doc.title || full?.title || "未命名笔记",
               contentMarkdown: doc.contentMarkdown ?? full?.contentMarkdown ?? doc.content ?? full?.content ?? "",
               content: doc.content ?? full?.content ?? doc.contentMarkdown ?? full?.contentMarkdown ?? "",
               tags: doc.tags || full?.tags || [],
@@ -116,7 +116,7 @@ export default {
               return {
                 id,
                 noteId: id,
-                title: full.title || "未命名画布",
+                title: full.title || "未命名笔记",
                 contentMarkdown: full.contentMarkdown || full.content || "",
                 content: full.content || full.contentMarkdown || "",
                 tags: full.tags || [],
@@ -136,7 +136,7 @@ export default {
             return {
               id,
               noteId: id,
-              title: full.title || "未命名画布",
+              title: full.title || "未命名笔记",
               contentMarkdown: full.contentMarkdown || full.content || "",
               content: full.content || full.contentMarkdown || "",
               tags: full.tags || [],
@@ -150,69 +150,71 @@ export default {
     }
 
     /**
-     * DOM 级双重嗅探：当 API 尚未准备就绪或返回正文延迟时，直接从渲染 DOM 提取画布数据
+     * DOM 级精准嗅探：仅在当前编辑器容器内部探测是否含有明确的 canvas-board 标记
      */
     function sniffCanvasFromDOM() {
-      // A. 嗅探包含 elements 与 viewport 的代码块
-      const codeBlocks = document.querySelectorAll("pre, code, [class*='code'], .ProseMirror pre, .milkdown pre");
-      for (const block of codeBlocks) {
-        const text = block.textContent || "";
-        if (text.includes('"elements"') && (text.includes('"viewport"') || text.includes('"version"'))) {
-          try {
-            const parsed = JSON.parse(text.trim());
-            if (parsed && Array.isArray(parsed.elements)) {
-              return { isCanvas: true, data: parsed, blockEl: block };
-            }
-          } catch (_) {
-            const match = text.match(/\{[\s\S]*"elements"[\s\S]*\}/);
-            if (match) {
-              try {
-                const parsed = JSON.parse(match[0]);
-                if (parsed && Array.isArray(parsed.elements)) {
-                  return { isCanvas: true, data: parsed, blockEl: block };
-                }
-              } catch (_) {}
-            }
-          }
-        }
-      }
-
-      // B. 嗅探主编辑器容器
       const contentEl = findEditorContentContainer();
-      if (contentEl) {
-        const text = contentEl.textContent || "";
-        if (text.includes("canvas-board") || (text.includes('"elements"') && text.includes('"viewport"'))) {
-          const match = text.match(/```canvas-board\s*([\s\S]*?)```/i) || text.match(/\{[\s\S]*"elements"[\s\S]*\}/);
-          if (match) {
-            try {
-              const raw = match[1] || match[0];
-              const parsed = JSON.parse(raw.trim());
-              if (parsed && Array.isArray(parsed.elements)) {
-                return { isCanvas: true, data: parsed, blockEl: null };
-              }
-            } catch (_) {}
-          }
-          return { isCanvas: true, data: null, blockEl: null };
+      if (!contentEl) return null;
+
+      // 仅检查编辑器内部文本是否包含明确的 ```canvas-board 标记
+      const text = contentEl.textContent || "";
+      if (text.includes("```canvas-board") || text.includes("canvas-board")) {
+        const match = text.match(/```canvas-board\s*([\s\S]*?)```/i);
+        if (match && match[1]) {
+          try {
+            const parsed = JSON.parse(match[1].trim());
+            if (parsed && Array.isArray(parsed.elements)) {
+              return { isCanvas: true, data: parsed };
+            }
+          } catch (_) {}
         }
       }
 
-      // C. 嗅探标签栏或标题
-      const pageText = document.body.textContent || "";
-      if (pageText.includes("#画布") && (pageText.includes('"elements"') || pageText.includes("canvas-board"))) {
-        return { isCanvas: true, data: null, blockEl: null };
+      // 检查内部的 pre/code 代码块是否有 canvas-board 相关类名或内容
+      const codeBlocks = contentEl.querySelectorAll("pre, code, [class*='code']");
+      for (const block of codeBlocks) {
+        const blockClass = block.className || "";
+        const blockText = block.textContent || "";
+        if (blockClass.includes("canvas-board") || (blockText.includes('"elements"') && blockText.includes('"viewport"'))) {
+          try {
+            const parsed = JSON.parse(blockText.trim());
+            if (parsed && Array.isArray(parsed.elements)) {
+              return { isCanvas: true, data: parsed };
+            }
+          } catch (_) {}
+        }
       }
 
       return null;
     }
 
+    /**
+     * 极高严谨度的画布笔记识别：普通笔记绝不误判
+     */
     function isCanvasNote(note, domSniff = null) {
-      if (domSniff && domSniff.isCanvas) return true;
-      if (!note) return false;
+      if (!note) {
+        return !!(domSniff && domSniff.isCanvas);
+      }
+
       const content = note.contentMarkdown || note.content || "";
-      if (CANVAS_CODEBLOCK_REGEX.test(content)) return true;
-      if (content.includes("canvas-board") || (content.includes('"elements"') && content.includes('"viewport"'))) return true;
-      if (Array.isArray(note.tags) && (note.tags.includes("画布") || note.tags.includes("canvas"))) return true;
-      if (note.title && (note.title.includes("画布") || note.title.includes("Whiteboard"))) return true;
+
+      // 1. 如果正文明确含有 ```canvas-board 块，判定为画布
+      if (CANVAS_CODEBLOCK_REGEX.test(content) || content.includes("```canvas-board")) {
+        return true;
+      }
+
+      // 2. 如果标签明确含有 "画布" 或 "canvas"，并且正文包含 elements 与 viewport 数据
+      const hasCanvasTag = Array.isArray(note.tags) && (note.tags.includes("画布") || note.tags.includes("canvas"));
+      if (hasCanvasTag && content.includes('"elements"') && content.includes('"viewport"')) {
+        return true;
+      }
+
+      // 3. 如果 API 返回正文暂时为空（加载中），且仅当 DOM 编辑器内确切嗅探到了 canvas-board
+      if (!content.trim() && domSniff && domSniff.isCanvas) {
+        return true;
+      }
+
+      // 4. 其他任何情况（普通 Markdown、SAP 笔记、代码片段等）严格判定为 false！
       return false;
     }
 
@@ -551,9 +553,29 @@ export default {
           canvasContainerEl.remove();
           canvasContainerEl = null;
         }
-        const contentEl = findEditorContentContainer();
-        if (contentEl) contentEl.style.display = "";
-        document.querySelector(".edgeever-cb-source-float-btn")?.remove();
+        document.querySelectorAll(".edgeever-canvas-board-container").forEach((el) => el.remove());
+        document.querySelectorAll(".edgeever-cb-source-float-btn").forEach((el) => el.remove());
+
+        // 彻底还原所有可能被隐藏的原生编辑器元素
+        const selectors = [
+          ".ProseMirror",
+          ".milkdown",
+          ".markdown-body",
+          ".editor-content",
+          ".memo-content",
+          ".note-content",
+          ".edgeever-preview-markdown",
+          ".edgeever-workspace-editor .content",
+          ".edgeever-workspace-editor [class*='content']",
+          "article",
+        ];
+        for (const sel of selectors) {
+          document.querySelectorAll(sel).forEach((el) => {
+            if (el.style.display === "none") {
+              el.style.display = "";
+            }
+          });
+        }
         return;
       }
 
