@@ -559,6 +559,42 @@ export default {
       return null;
     }
 
+    /**
+     * 智能隐藏/显示原生的 Markdown 格式工具栏（包含加粗、斜体、列表等）
+     */
+    function toggleMarkdownToolbars(show) {
+      const toolbars = document.querySelectorAll(
+        ".milkdown .toolbar, .editor-toolbar, [class*='toolbar'], [class*='format'], [role='toolbar']"
+      );
+      toolbars.forEach((tb) => {
+        if (!tb.closest(".edgeever-canvas-board-container")) {
+          tb.classList.toggle("edgeever-cb-hidden-toolbar", !show);
+          if (!show) tb.style.display = "none";
+          else tb.style.display = "";
+        }
+      });
+    }
+
+    /**
+     * 展开右侧工作区视口，消除文章居中与宽度约束，实现 100% 满屏沉浸
+     */
+    function toggleFullViewport(enable) {
+      const contentEl = findEditorContentContainer();
+      if (!contentEl) return;
+      let curr = contentEl.parentElement;
+      while (curr && curr !== document.body) {
+        if (curr.classList.contains("edgeever-workspace-editor") || curr.matches("[class*='editor-container']")) {
+          break;
+        }
+        if (enable) {
+          curr.classList.add("edgeever-cb-full-viewport");
+        } else {
+          curr.classList.remove("edgeever-cb-full-viewport");
+        }
+        curr = curr.parentElement;
+      }
+    }
+
     async function checkAndMountCanvasBoard(force = false) {
       // 1. 尝试从 API 解析当前笔记
       const note = await resolveCurrentNote();
@@ -574,6 +610,10 @@ export default {
         }
         document.querySelectorAll(".edgeever-canvas-board-container").forEach((el) => el.remove());
         document.querySelectorAll(".edgeever-cb-source-float-btn").forEach((el) => el.remove());
+
+        // 还原 Markdown 工具栏与容器排版
+        toggleMarkdownToolbars(true);
+        toggleFullViewport(false);
 
         // 彻底还原所有可能被隐藏的原生编辑器元素
         const selectors = [
@@ -609,6 +649,10 @@ export default {
       }
       parentWrap.style.minHeight = "600px";
 
+      // 隐藏 Markdown 格式工具栏，铺满整个视口
+      toggleMarkdownToolbars(false);
+      toggleFullViewport(true);
+
       const currentId = String(currentNote.id || currentNote.noteId || "canvas_board");
 
       if (!force && canvasContainerEl && canvasContainerEl.isConnected) {
@@ -616,6 +660,8 @@ export default {
           if (activeViewMode === "canvas") {
             contentEl.style.display = "none";
             canvasContainerEl.style.display = "flex";
+            toggleMarkdownToolbars(false);
+            toggleFullViewport(true);
           }
           return;
         }
@@ -655,6 +701,8 @@ export default {
       floatBtn.onclick = () => {
         activeViewMode = "canvas";
         floatBtn.remove();
+        toggleMarkdownToolbars(false);
+        toggleFullViewport(true);
         if (contentEl) contentEl.style.display = "none";
         if (canvasContainerEl) {
           canvasContainerEl.style.display = "flex";
@@ -677,8 +725,12 @@ export default {
       // 在画布视图模式下，完全隐藏底层的原生 Markdown 编辑器，防止 JSON 字符串透出
       if (activeViewMode === "canvas") {
         contentEl.style.display = "none";
+        toggleMarkdownToolbars(false);
+        toggleFullViewport(true);
       } else {
         contentEl.style.display = "";
+        toggleMarkdownToolbars(true);
+        toggleFullViewport(false);
       }
 
       canvasContainerEl = document.createElement("div");
@@ -690,49 +742,56 @@ export default {
       }
 
       canvasContainerEl.innerHTML = `
-        <!-- 背景点阵网格 -->
-        <div class="edgeever-cb-grid-layer style-${settings.defaultGridStyle}"></div>
-
-        <!-- 顶部悬浮工具栏 -->
+        <!-- 顶部沉浸式通栏专业工具条 (媲美原生流程图) -->
         <div class="edgeever-cb-toolbar">
-          <button type="button" class="edgeever-cb-tool-btn is-active" data-tool="select" title="选择/移动 (V)">${ICONS.select}</button>
-          <button type="button" class="edgeever-cb-tool-btn" data-tool="card" title="新建便签卡片 (N)">${ICONS.card}</button>
-          <button type="button" class="edgeever-cb-tool-btn" data-tool="rect" title="矩形容器框 (R)">${ICONS.rect}</button>
-          <button type="button" class="edgeever-cb-tool-btn" data-tool="circle" title="圆形节点 (C)">${ICONS.circle}</button>
-          <button type="button" class="edgeever-cb-tool-btn" data-tool="diamond" title="菱形判断 (D)">${ICONS.diamond}</button>
-          <button type="button" class="edgeever-cb-tool-btn" data-tool="arrow" title="箭头连线 (A)">${ICONS.arrow}</button>
-          <button type="button" class="edgeever-cb-tool-btn" data-tool="text" title="独立文本 (T)">${ICONS.text}</button>
-          <div class="edgeever-cb-divider"></div>
-          <button type="button" class="edgeever-cb-tool-btn btn-delete" title="删除选中元素 (Del)">${ICONS.delete}</button>
-          <button type="button" class="edgeever-cb-tool-btn btn-export" title="导出为图片 (PNG)">${ICONS.export}</button>
+          <div class="edgeever-cb-toolbar-group">
+            <button type="button" class="edgeever-cb-tool-btn is-active" data-tool="select" title="选择/移动 (V)">${ICONS.select} <span>选择</span></button>
+            <button type="button" class="edgeever-cb-tool-btn" data-tool="card" title="新建便签卡片 (N)">${ICONS.card} <span>便签卡片</span></button>
+            <button type="button" class="edgeever-cb-tool-btn" data-tool="rect" title="矩形容器框 (R)">${ICONS.rect} <span>矩形</span></button>
+            <button type="button" class="edgeever-cb-tool-btn" data-tool="circle" title="圆形节点 (C)">${ICONS.circle} <span>圆形</span></button>
+            <button type="button" class="edgeever-cb-tool-btn" data-tool="diamond" title="菱形判断 (D)">${ICONS.diamond} <span>菱形</span></button>
+            <button type="button" class="edgeever-cb-tool-btn" data-tool="arrow" title="箭头连线 (A)">${ICONS.arrow} <span>连线</span></button>
+            <button type="button" class="edgeever-cb-tool-btn" data-tool="text" title="独立文本 (T)">${ICONS.text} <span>文本</span></button>
+            <div class="edgeever-cb-divider"></div>
+            <button type="button" class="edgeever-cb-tool-btn btn-delete" title="删除选中元素 (Del)">${ICONS.delete} <span>删除</span></button>
+          </div>
+
+          <div class="edgeever-cb-toolbar-group">
+            <div class="edgeever-cb-zoom-group">
+              <button type="button" class="edgeever-cb-zoom-btn btn-zoom-out" title="缩小">-</button>
+              <span class="edgeever-cb-zoom-val">100%</span>
+              <button type="button" class="edgeever-cb-zoom-btn btn-zoom-in" title="放大">+</button>
+              <button type="button" class="edgeever-cb-zoom-btn btn-zoom-fit" title="居中还原">居中</button>
+            </div>
+            <div class="edgeever-cb-divider"></div>
+            <span class="edgeever-cb-save-indicator">${ICONS.check} 已自动同步</span>
+            <div class="edgeever-cb-divider"></div>
+            <button type="button" class="edgeever-cb-tool-btn btn-export" title="导出为高清图片 (PNG)">${ICONS.export} <span>导出</span></button>
+            <button type="button" class="edgeever-cb-tool-btn btn-view-code" title="查看 Markdown 源码">📄 <span>源码</span></button>
+          </div>
         </div>
 
-        <!-- 右上角模式切换 -->
-        <div class="edgeever-cb-view-switch">
-          <button type="button" class="edgeever-cb-switch-btn is-active btn-view-canvas">🎨 画布视图</button>
-          <button type="button" class="edgeever-cb-switch-btn btn-view-code">📄 源码</button>
-        </div>
+        <!-- 100% 满屏无界画布主视口 -->
+        <div class="edgeever-cb-viewport">
+          <!-- 背景点阵网格 -->
+          <div class="edgeever-cb-grid-layer style-${settings.defaultGridStyle}"></div>
 
-        <!-- SVG 连线图层 -->
-        <svg class="edgeever-cb-svg-layer">
-          <defs>
-            <marker id="cb-arrow-marker" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-              <path d="M 0 1 L 10 5 L 0 9 z" fill="#3b82f6" />
-            </marker>
-          </defs>
-        </svg>
+          <!-- SVG 连线图层 -->
+          <svg class="edgeever-cb-svg-layer">
+            <defs>
+              <marker id="cb-arrow-marker" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#3b82f6" />
+              </marker>
+            </defs>
+          </svg>
 
-        <!-- 舞台 (节点卡片) -->
-        <div class="edgeever-cb-stage"></div>
+          <!-- 舞台 (节点卡片) -->
+          <div class="edgeever-cb-stage"></div>
 
-        <!-- 左下角状态与缩放 -->
-        <div class="edgeever-cb-status-bar">
-          <button type="button" class="edgeever-cb-zoom-btn btn-zoom-out">-</button>
-          <span class="edgeever-cb-zoom-val">100%</span>
-          <button type="button" class="edgeever-cb-zoom-btn btn-zoom-in">+</button>
-          <button type="button" class="edgeever-cb-zoom-btn btn-zoom-fit">居中</button>
-          <div class="edgeever-cb-divider"></div>
-          <span class="edgeever-cb-save-indicator">${ICONS.check} 已自动同步</span>
+          <!-- 左下角原生风格极简操作提示标签 -->
+          <div class="edgeever-cb-hint-pill">
+            <kbd>空格</kbd> 拖拽平移 <kbd>Ctrl+滚轮</kbd> 缩放画布
+          </div>
         </div>
       `;
 
@@ -761,7 +820,9 @@ export default {
         grid.style.backgroundPosition = `${x}px ${y}px`;
         grid.style.backgroundSize = `${24 * zoom}px ${24 * zoom}px`;
 
-        zoomValEl.textContent = `${Math.round(zoom * 100)}%`;
+        if (zoomValEl) {
+          zoomValEl.textContent = `${Math.round(zoom * 100)}%`;
+        }
         renderConnections();
       }
 
@@ -854,48 +915,50 @@ export default {
       });
 
       // 缩放控制按钮
-      root.querySelector(".btn-zoom-in").onclick = () => {
-        canvasData.viewport.zoom = Math.min(3.0, canvasData.viewport.zoom + 0.15);
-        updateViewportTransform();
-      };
-      root.querySelector(".btn-zoom-out").onclick = () => {
-        canvasData.viewport.zoom = Math.max(0.2, canvasData.viewport.zoom - 0.15);
-        updateViewportTransform();
-      };
-      root.querySelector(".btn-zoom-fit").onclick = () => {
-        canvasData.viewport.x = 0;
-        canvasData.viewport.y = 0;
-        canvasData.viewport.zoom = 1;
-        updateViewportTransform();
-      };
+      const inBtn = root.querySelector(".btn-zoom-in");
+      if (inBtn) {
+        inBtn.onclick = () => {
+          canvasData.viewport.zoom = Math.min(3.0, canvasData.viewport.zoom + 0.15);
+          updateViewportTransform();
+        };
+      }
+      const outBtn = root.querySelector(".btn-zoom-out");
+      if (outBtn) {
+        outBtn.onclick = () => {
+          canvasData.viewport.zoom = Math.max(0.2, canvasData.viewport.zoom - 0.15);
+          updateViewportTransform();
+        };
+      }
+      const fitBtn = root.querySelector(".btn-zoom-fit");
+      if (fitBtn) {
+        fitBtn.onclick = () => {
+          canvasData.viewport.x = 0;
+          canvasData.viewport.y = 0;
+          canvasData.viewport.zoom = 1;
+          updateViewportTransform();
+        };
+      }
 
       // 删除按钮
-      root.querySelector(".btn-delete").onclick = deleteSelectedElement;
+      const delBtn = root.querySelector(".btn-delete");
+      if (delBtn) delBtn.onclick = deleteSelectedElement;
 
       // 导出图片
-      root.querySelector(".btn-export").onclick = exportCanvasAsImage;
+      const expBtn = root.querySelector(".btn-export");
+      if (expBtn) expBtn.onclick = exportCanvasAsImage;
 
-      // 视图切换
-      root.querySelector(".btn-view-code").onclick = () => {
-        activeViewMode = "code";
-        if (canvasContainerEl) canvasContainerEl.style.display = "none";
-        if (contentEl) contentEl.style.display = "";
-        createSourceFloatButton(parentWrap, contentEl);
-      };
-      root.querySelector(".btn-view-canvas").onclick = () => {
-        activeViewMode = "canvas";
-        document.querySelector(".edgeever-cb-source-float-btn")?.remove();
-        if (contentEl) contentEl.style.display = "none";
-        if (canvasContainerEl) {
-          canvasContainerEl.style.display = "flex";
-          // 重新从 DOM 提取在源码模式下可能更改的 JSON
-          const sniff = sniffCanvasFromDOM();
-          if (sniff?.data) {
-            canvasData = sniff.data;
-            renderElements();
-          }
-        }
-      };
+      // 视图切换为源码
+      const codeBtn = root.querySelector(".btn-view-code");
+      if (codeBtn) {
+        codeBtn.onclick = () => {
+          activeViewMode = "code";
+          toggleMarkdownToolbars(true);
+          toggleFullViewport(false);
+          if (canvasContainerEl) canvasContainerEl.style.display = "none";
+          if (contentEl) contentEl.style.display = "";
+          createSourceFloatButton(parentWrap, contentEl);
+        };
+      }
 
       updateViewportTransform();
     }
@@ -1330,6 +1393,8 @@ export default {
     return () => {
       observer.disconnect();
       document.removeEventListener("click", handleGlobalClick, true);
+      toggleMarkdownToolbars(true);
+      toggleFullViewport(false);
       if (canvasContainerEl) canvasContainerEl.remove();
       document.querySelector(".edgeever-cb-source-float-btn")?.remove();
       const contentEl = findEditorContentContainer();
@@ -1344,6 +1409,11 @@ export default {
     if (typeof window !== "undefined") {
       document.querySelector(".edgeever-canvas-board-container")?.remove();
       document.querySelector(".edgeever-cb-source-float-btn")?.remove();
+      document.querySelectorAll(".edgeever-cb-full-viewport").forEach((el) => el.classList.remove("edgeever-cb-full-viewport"));
+      document.querySelectorAll(".edgeever-cb-hidden-toolbar").forEach((el) => {
+        el.classList.remove("edgeever-cb-hidden-toolbar");
+        el.style.display = "";
+      });
       const selectors = [
         ".ProseMirror",
         ".milkdown",

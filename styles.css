@@ -213,59 +213,80 @@ body.theme-light, [data-theme="light"] {
   cursor: grabbing;
 }
 
+/* 解除文章居中与内边距限制，实现 100% 沉浸式满屏画布 */
+.edgeever-cb-full-viewport,
+.edgeever-cb-full-viewport .content,
+.edgeever-cb-full-viewport article,
+.edgeever-cb-full-viewport [class*="content"],
+.edgeever-cb-full-viewport .ProseMirror,
+.edgeever-cb-full-viewport .milkdown {
+  max-width: 100% !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.edgeever-cb-hidden-toolbar {
+  display: none !important;
+}
+
 /* ==========================================================================
-   3. 浮动现代化中控工具栏 (Floating Action Toolbar)
+   3. 顶部沉浸式通栏专业工具栏 (媲美原生流程图)
    ========================================================================== */
 .edgeever-cb-toolbar {
-  position: absolute;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 100;
+  position: relative;
+  width: 100%;
+  height: 42px;
+  min-height: 42px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: var(--ee-cb-surface-elevated);
+  border-bottom: 1px solid var(--ee-cb-border);
+  box-sizing: border-box;
+  user-select: none;
+}
+
+.edgeever-cb-toolbar-group {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 8px;
-  border-radius: 30px;
-  background: var(--ee-cb-surface);
-  border: 1px solid var(--ee-cb-border);
-  box-shadow: var(--ee-cb-shadow);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  user-select: none;
-  transition: all 0.2s ease;
 }
 
 .edgeever-cb-tool-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: flex;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  border: none;
+  gap: 5px;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--ee-cb-text-muted);
+  font-size: 12px;
   cursor: pointer;
   transition: all 0.15s ease;
-  padding: 0;
 }
 
 .edgeever-cb-tool-btn:hover {
   background: var(--ee-cb-primary-light);
   color: var(--ee-cb-primary);
-  transform: translateY(-1px);
 }
 
 .edgeever-cb-tool-btn.is-active {
-  background: var(--ee-cb-primary);
-  color: #ffffff;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+  background: var(--ee-cb-primary-light);
+  color: var(--ee-cb-primary);
+  border-color: var(--ee-cb-primary);
+  font-weight: 600;
 }
 
 .edgeever-cb-tool-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
 }
 
 .edgeever-cb-divider {
@@ -275,23 +296,51 @@ body.theme-light, [data-theme="light"] {
   margin: 0 4px;
 }
 
-/* 视口缩放与状态信息浮岛 */
-.edgeever-cb-status-bar {
+/* 画布主视口容器 */
+.edgeever-cb-viewport {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  height: calc(100% - 42px);
+  overflow: hidden;
+}
+
+/* 左下角极简操作提示标签 (如同原生流程图) */
+.edgeever-cb-hint-pill {
   position: absolute;
-  bottom: 18px;
-  left: 20px;
-  z-index: 100;
-  display: flex;
+  bottom: 14px;
+  left: 14px;
+  z-index: 40;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 4px 10px;
-  border-radius: 20px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--ee-cb-text-muted);
+  font-size: 11px;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+}
+
+.edgeever-cb-hint-pill kbd {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--ee-cb-text);
+  font-size: 10.5px;
+}
+
+/* 缩放控制器 */
+.edgeever-cb-zoom-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px;
+  border-radius: 6px;
   background: var(--ee-cb-surface);
   border: 1px solid var(--ee-cb-border);
-  box-shadow: var(--ee-cb-shadow-sm);
-  backdrop-filter: blur(16px);
-  font-size: 11.5px;
-  color: var(--ee-cb-text-muted);
 }
 
 .edgeever-cb-zoom-btn {
@@ -299,7 +348,7 @@ body.theme-light, [data-theme="light"] {
   border: none;
   color: var(--ee-cb-text-muted);
   cursor: pointer;
-  padding: 2px 5px;
+  padding: 2px 6px;
   border-radius: 4px;
   font-size: 12px;
   display: flex;
@@ -313,9 +362,10 @@ body.theme-light, [data-theme="light"] {
 }
 
 .edgeever-cb-zoom-val {
-  min-width: 42px;
+  min-width: 38px;
   text-align: center;
   font-weight: 600;
+  font-size: 11.5px;
   color: var(--ee-cb-text);
 }
 
@@ -324,42 +374,8 @@ body.theme-light, [data-theme="light"] {
   align-items: center;
   gap: 4px;
   color: #10b981;
-  font-size: 11px;
-  font-weight: 500;
-}
-
-/* 右上角模式切换胶囊 (画布 / 源码) */
-.edgeever-cb-view-switch {
-  position: absolute;
-  top: 16px;
-  right: 20px;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  background: var(--ee-cb-surface);
-  border: 1px solid var(--ee-cb-border);
-  border-radius: 20px;
-  padding: 3px;
-  box-shadow: var(--ee-cb-shadow-sm);
-  backdrop-filter: blur(16px);
-}
-
-.edgeever-cb-switch-btn {
-  padding: 4px 10px;
   font-size: 11.5px;
   font-weight: 500;
-  border-radius: 14px;
-  border: none;
-  background: transparent;
-  color: var(--ee-cb-text-muted);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.edgeever-cb-switch-btn.is-active {
-  background: var(--ee-cb-primary);
-  color: #fff;
-  font-weight: 600;
 }
 
 /* ==========================================================================
