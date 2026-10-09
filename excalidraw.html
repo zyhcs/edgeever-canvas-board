@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Excalidraw Canvas</title>
+  <title>Excalidraw Whiteboard</title>
   <style>
     html, body, #root {
       width: 100%;
@@ -27,6 +27,7 @@
       gap: 16px;
       z-index: 100;
       transition: opacity 0.25s ease;
+      user-select: none;
     }
     .spinner {
       width: 36px;
@@ -43,115 +44,143 @@
       color: #a1a1aa;
       font-size: 12px;
     }
-    /* 屏蔽官方外部营销链接与多余菜单 */
+    .error-container {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      color: #f87171;
+    }
+    .retry-btn {
+      padding: 6px 16px;
+      background: #3b82f6;
+      color: #ffffff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
     .excalidraw .help-dialog-button {
       display: none !important;
     }
   </style>
-  <script type="importmap">
-    {
-      "imports": {
-        "react": "https://esm.sh/react@18.2.0",
-        "react-dom": "https://esm.sh/react-dom@18.2.0",
-        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-        "@excalidraw/excalidraw": "https://esm.sh/@excalidraw/excalidraw@0.18.1"
-      }
-    }
+  <script>
+    window.process = { env: { NODE_ENV: 'production' } };
   </script>
+  <!-- 基础 UMD 依赖库 (优先国内高可用 jsdelivr 镜像) -->
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.17.6/dist/excalidraw.production.min.js"></script>
 </head>
 <body>
   <div id="loading">
     <div class="spinner"></div>
     <div style="font-weight: 500;">正在载入 Excalidraw 手绘矢量白板引擎...</div>
-    <div class="loading-tip">支持手绘自由涂鸦、几何形状、压感画笔与开源素材库</div>
+    <div class="loading-tip">手绘涂鸦 / 压感画笔 / 几何图表 / 调色板 / 开源素材库</div>
+    <div class="error-container" id="error-box">
+      <div id="error-msg">引擎加载遇到网络阻碍，请检查网络或重试</div>
+      <button type="button" class="retry-btn" onclick="location.reload()">重新加载</button>
+    </div>
   </div>
   <div id="root"></div>
 
-  <script type="module">
-    import React, { useState, useEffect } from 'react';
-    import { createRoot } from 'react-dom/client';
-    import { Excalidraw } from '@excalidraw/excalidraw';
+  <script>
+    (function() {
+      const React = window.React;
+      const ReactDOM = window.ReactDOM;
+      const ExcalidrawLib = window.ExcalidrawLib;
 
-    window.EXCALIDRAW_ASSET_PATH = "https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.18.0/dist/prod/";
+      if (!React || !ReactDOM || !ExcalidrawLib || !ExcalidrawLib.Excalidraw) {
+        console.error("Excalidraw 依赖加载失败");
+        const spinner = document.querySelector('.spinner');
+        const errBox = document.getElementById('error-box');
+        if (spinner) spinner.style.display = 'none';
+        if (errBox) errBox.style.display = 'flex';
+        return;
+      }
 
-    let excalidrawAPI = null;
-    let isInitialLoaded = false;
-    let pendingScene = null;
+      let excalidrawAPI = null;
+      let isInitialLoaded = false;
+      let pendingScene = null;
 
-    function App() {
-      const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const [theme, setTheme] = useState(isDark ? 'dark' : 'light');
+      function App() {
+        const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const [theme, setTheme] = React.useState(isDark ? 'dark' : 'light');
 
-      const handleChange = (elements, appState) => {
-        if (!isInitialLoaded) return;
-        window.parent.postMessage({
-          type: 'EXCALIDRAW_CHANGE',
-          elements,
-          appState: {
-            viewBackgroundColor: appState.viewBackgroundColor,
-            currentItemFontFamily: appState.currentItemFontFamily,
-            theme: appState.theme,
+        const handleChange = (elements, appState) => {
+          if (!isInitialLoaded) return;
+          window.parent.postMessage({
+            type: 'EXCALIDRAW_CHANGE',
+            elements: elements,
+            appState: {
+              viewBackgroundColor: appState.viewBackgroundColor,
+              currentItemFontFamily: appState.currentItemFontFamily,
+              theme: appState.theme,
+            }
+          }, '*');
+        };
+
+        return React.createElement(ExcalidrawLib.Excalidraw, {
+          excalidrawAPI: function(api) {
+            excalidrawAPI = api;
+            const loadingEl = document.getElementById('loading');
+            if (loadingEl) {
+              loadingEl.style.opacity = '0';
+              setTimeout(function() { loadingEl.remove(); }, 250);
+            }
+            window.parent.postMessage({ type: 'EXCALIDRAW_READY' }, '*');
+
+            if (pendingScene) {
+              excalidrawAPI.updateScene(pendingScene);
+              pendingScene = null;
+              setTimeout(function() { isInitialLoaded = true; }, 100);
+            } else {
+              isInitialLoaded = true;
+            }
+          },
+          theme: theme,
+          langCode: 'zh-CN',
+          onChange: handleChange,
+          UIOptions: {
+            canvasActions: {
+              saveToActiveFile: false,
+              loadScene: true,
+              export: { saveFileToDisk: true },
+              theme: true,
+            }
           }
-        }, '*');
-      };
+        });
+      }
 
-      return React.createElement(Excalidraw, {
-        excalidrawAPI: (api) => {
-          excalidrawAPI = api;
-          const loadingEl = document.getElementById('loading');
-          if (loadingEl) {
-            loadingEl.style.opacity = '0';
-            setTimeout(() => loadingEl.remove(), 250);
-          }
-          window.parent.postMessage({ type: 'EXCALIDRAW_READY' }, '*');
+      window.addEventListener('message', function(event) {
+        const data = event.data || {};
+        const type = data.type;
+        const payload = data.payload;
 
-          if (pendingScene) {
-            excalidrawAPI.updateScene(pendingScene);
-            pendingScene = null;
-            setTimeout(() => { isInitialLoaded = true; }, 100);
+        if (type === 'SET_SCENE') {
+          const scene = {
+            elements: Array.isArray(payload && payload.elements) ? payload.elements : [],
+            appState: (payload && payload.appState) || {}
+          };
+          if (excalidrawAPI) {
+            isInitialLoaded = false;
+            excalidrawAPI.updateScene(scene);
+            setTimeout(function() { isInitialLoaded = true; }, 100);
           } else {
-            isInitialLoaded = true;
+            pendingScene = scene;
           }
-        },
-        theme: theme,
-        langCode: 'zh-CN',
-        onChange: handleChange,
-        UIOptions: {
-          canvasActions: {
-            saveToActiveFile: false,
-            loadScene: true,
-            export: { saveFileToDisk: true },
-            theme: true,
+        } else if (type === 'SET_THEME') {
+          if (excalidrawAPI && payload && payload.theme) {
+            excalidrawAPI.updateScene({
+              appState: { theme: payload.theme }
+            });
           }
         }
       });
-    }
 
-    window.addEventListener('message', (event) => {
-      const { type, payload } = event.data || {};
-      if (type === 'SET_SCENE') {
-        const scene = {
-          elements: Array.isArray(payload?.elements) ? payload.elements : [],
-          appState: payload?.appState || {}
-        };
-        if (excalidrawAPI) {
-          isInitialLoaded = false;
-          excalidrawAPI.updateScene(scene);
-          setTimeout(() => { isInitialLoaded = true; }, 100);
-        } else {
-          pendingScene = scene;
-        }
-      } else if (type === 'SET_THEME') {
-        if (excalidrawAPI && payload?.theme) {
-          excalidrawAPI.updateScene({
-            appState: { theme: payload.theme }
-          });
-        }
-      }
-    });
-
-    const root = createRoot(document.getElementById('root'));
-    root.render(React.createElement(App));
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(React.createElement(App));
+    })();
   </script>
 </body>
 </html>

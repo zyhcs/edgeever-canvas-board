@@ -2,7 +2,7 @@
   "type": "plugin",
   "id": "org.edgeever.plugins.canvas-board",
   "name": "Canvas Board: Excalidraw Whiteboard Suite",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "apiVersion": "2",
   "settingsUi": "host",
   "description": "Infinite canvas & visual whiteboard plugin for EdgeEver with full Excalidraw integration: Native new note type in dropdown menu, freehand doodles, eraser, shapes, custom palettes, libraries, and 100% offline auto-persistence.",

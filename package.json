@@ -1,6 +1,6 @@
 {
   "name": "edgeever-canvas-board",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Infinite canvas & visual whiteboard plugin for EdgeEver with full Excalidraw integration: Native new note type, pressure-sensitive freehand doodles, eraser, shapes, custom palettes, libraries, and 100% offline auto-persistence.",
   "main": "main.js",
   "scripts": {
