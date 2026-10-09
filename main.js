@@ -466,9 +466,6 @@ export default {
           } else if (context.ui?.openNote) {
             context.ui.openNote(createdNote.id);
           }
-          if (context.ui?.showNotice) {
-            context.ui.showNotice("🎨 已成功创建 Excalidraw 原生手绘白板！", { type: "success" });
-          }
 
           setTimeout(() => checkAndMountCanvasBoard(true), 60);
           setTimeout(() => checkAndMountCanvasBoard(true), 200);
@@ -1093,22 +1090,16 @@ export default {
       }
     }
 
-    // 删除当前选中的图元组件（智能响应：选中有删，无选删尾，随时可点）
+    // 删除当前选中的图元组件（智能静默响应：选中有删，无选删尾，随时可点，零阻塞弹窗）
     function deleteSelectedElement() {
       if (!selectedElementId) {
         if (canvasData?.elements && canvasData.elements.length > 0) {
           pushHistory();
-          const removed = canvasData.elements.pop();
+          canvasData.elements.pop();
           selectedElementId = null;
           renderAll();
           scheduleAutoSave();
-          if (context.ui?.showNotice) {
-            context.ui.showNotice("✓ 已删除最后一个组件", { type: "success" });
-          }
           return;
-        }
-        if (context.ui?.showNotice) {
-          context.ui.showNotice("当前画布上没有可删除的组件", { type: "info" });
         }
         return;
       }
@@ -1117,9 +1108,6 @@ export default {
       selectedElementId = null;
       renderAll();
       scheduleAutoSave();
-      if (context.ui?.showNotice) {
-        context.ui.showNotice("✓ 已删除选中图元组件", { type: "success" });
-      }
     }
 
     // 挂载核心容器与交互
@@ -1420,9 +1408,6 @@ export default {
           renderAll();
           updateInspector(true); // 自动展开调色板供用户调整
           scheduleAutoSave();
-          if (context.ui?.showNotice) {
-            context.ui.showNotice("✓ 已添加组件，可拖拽移动或在左侧修改样式", { type: "success" });
-          }
         }
       }
 
@@ -1530,14 +1515,15 @@ export default {
 
       // 导出 PNG
       root.querySelector(".btn-export").onclick = () => {
-        if (context.ui?.showNotice) {
-          context.ui.showNotice("🎨 画布高清导出中...", { type: "info" });
+        const ind = root.querySelector(".edgeever-cb-save-indicator");
+        if (ind) {
+          ind.innerHTML = `✓ 已就绪，右键或截图即可导出当前白板`;
+          ind.style.color = "var(--ee-cb-primary)";
+          setTimeout(() => {
+            ind.innerHTML = `${ICONS.check} 已自动同步`;
+            ind.style.color = "";
+          }, 3000);
         }
-        setTimeout(() => {
-          if (context.ui?.showNotice) {
-            context.ui.showNotice("✓ 已就绪，右键或使用截图即可复制当前白板！", { type: "success" });
-          }
-        }, 500);
       };
 
       // 切换源码模式
