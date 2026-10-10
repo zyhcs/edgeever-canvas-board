@@ -104,9 +104,30 @@ export default {
     let canvasContainerEl = null;
     let saveTimeout = null;
 
+    // 检测宿主是否处于暗黑主题模式
+    function isDarkMode() {
+      if (document.body.classList.contains("theme-light") || document.documentElement.getAttribute("data-theme") === "light") {
+        return false;
+      }
+      return true;
+    }
+
+    // 获取当前模式下的基准默认描边色（深色模式下为亮白色，浅色模式下为深碳黑）
+    function getDefaultStrokeColor() {
+      return isDarkMode() ? "#e4e4e7" : "#1e1e1e";
+    }
+
+    // 智能解析描边颜色：在深色模式下自动将低对比度的黑色提亮为高对比象牙白
+    function resolveStrokeColor(color) {
+      if (!color || color === "#1e1e1e" || color === "#000000" || color === "currentColor") {
+        return isDarkMode() ? "#e4e4e7" : "#1e1e1e";
+      }
+      return color;
+    }
+
     // 当前手绘样式调色板状态
     let currentStyle = {
-      strokeColor: "#1e1e1e",
+      strokeColor: getDefaultStrokeColor(),
       backgroundColor: "transparent",
       fillStyle: "solid", // 'none' | 'solid' | 'hachure' | 'cross-hatch'
       strokeWidth: 2, // 1 | 2 | 4
@@ -832,6 +853,8 @@ export default {
 
         const isSelected = el.id === selectedElementId;
         const rough = el.roughness ?? 1;
+        const strokeClr = resolveStrokeColor(el.strokeColor);
+        g.style.color = strokeClr;
 
         if (el.type === "freedraw" && Array.isArray(el.points) && el.points.length > 0) {
           // 自由涂鸦画笔
@@ -846,17 +869,25 @@ export default {
           }
           path.setAttribute("d", d);
           path.setAttribute("fill", "none");
-          path.setAttribute("stroke", el.strokeColor || "#1e1e1e");
+          path.setAttribute("stroke", strokeClr);
           path.setAttribute("stroke-width", el.strokeWidth || 2);
           path.setAttribute("stroke-linecap", "round");
           path.setAttribute("stroke-linejoin", "round");
           g.appendChild(path);
         } else if (el.type === "rect") {
-          // 矩形
+          // 矩形透明命中底板（保证透明背景时点击内部任何位置均能 100% 选中与拖拽）
+          const hitRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+          hitRect.setAttribute("x", el.x);
+          hitRect.setAttribute("y", el.y);
+          hitRect.setAttribute("width", el.w);
+          hitRect.setAttribute("height", el.h);
+          hitRect.setAttribute("fill", "transparent");
+          g.appendChild(hitRect);
+
           if (el.fillStyle === "hachure" || el.fillStyle === "cross-hatch") {
             const fillPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
             fillPath.setAttribute("d", generateHachureLines(el.x, el.y, el.w, el.h, 8, 45));
-            fillPath.setAttribute("stroke", el.strokeColor || "#1e1e1e");
+            fillPath.setAttribute("stroke", strokeClr);
             fillPath.setAttribute("stroke-width", "1");
             fillPath.setAttribute("opacity", "0.55");
             g.appendChild(fillPath);
@@ -879,7 +910,7 @@ export default {
           const left = createHandDrawnPath(rx, ry + rh, rx, ry, rough);
           borderPath.setAttribute("d", `${top} ${right} ${bottom} ${left}`);
           borderPath.setAttribute("fill", "none");
-          borderPath.setAttribute("stroke", el.strokeColor || "#1e1e1e");
+          borderPath.setAttribute("stroke", strokeClr);
           borderPath.setAttribute("stroke-width", el.strokeWidth || 2);
           g.appendChild(borderPath);
         } else if (el.type === "diamond") {
@@ -890,6 +921,12 @@ export default {
           const bottomX = cx, bottomY = el.y + el.h;
           const leftX = el.x, leftY = cy;
 
+          // 透明点击命中底板
+          const hitDiamond = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          hitDiamond.setAttribute("d", `M ${topX} ${topY} L ${rightX} ${rightY} L ${bottomX} ${bottomY} L ${leftX} ${leftY} Z`);
+          hitDiamond.setAttribute("fill", el.backgroundColor && el.backgroundColor !== "transparent" ? el.backgroundColor : "transparent");
+          g.appendChild(hitDiamond);
+
           const p1 = createHandDrawnPath(topX, topY, rightX, rightY, rough);
           const p2 = createHandDrawnPath(rightX, rightY, bottomX, bottomY, rough);
           const p3 = createHandDrawnPath(bottomX, bottomY, leftX, leftY, rough);
@@ -897,8 +934,8 @@ export default {
 
           const diamondPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
           diamondPath.setAttribute("d", `${p1} ${p2} ${p3} ${p4}`);
-          diamondPath.setAttribute("fill", el.backgroundColor || "transparent");
-          diamondPath.setAttribute("stroke", el.strokeColor || "#1e1e1e");
+          diamondPath.setAttribute("fill", "none");
+          diamondPath.setAttribute("stroke", strokeClr);
           diamondPath.setAttribute("stroke-width", el.strokeWidth || 2);
           g.appendChild(diamondPath);
         } else if (el.type === "circle") {
@@ -909,8 +946,8 @@ export default {
           ellipse.setAttribute("cy", cy);
           ellipse.setAttribute("rx", el.w / 2);
           ellipse.setAttribute("ry", el.h / 2);
-          ellipse.setAttribute("fill", el.backgroundColor || "transparent");
-          ellipse.setAttribute("stroke", el.strokeColor || "#1e1e1e");
+          ellipse.setAttribute("fill", el.backgroundColor && el.backgroundColor !== "transparent" ? el.backgroundColor : "transparent");
+          ellipse.setAttribute("stroke", strokeClr);
           ellipse.setAttribute("stroke-width", el.strokeWidth || 2);
           g.appendChild(ellipse);
         } else if (el.type === "arrow") {
@@ -919,7 +956,7 @@ export default {
           const d = createHandDrawnPath(el.x1, el.y1, el.x2, el.y2, rough);
           arrowPath.setAttribute("d", d);
           arrowPath.setAttribute("fill", "none");
-          arrowPath.setAttribute("stroke", el.strokeColor || "#3b82f6");
+          arrowPath.setAttribute("stroke", el.strokeColor ? strokeClr : "#3b82f6");
           arrowPath.setAttribute("stroke-width", el.strokeWidth || 2);
           arrowPath.setAttribute("marker-end", "url(#ee-arrow-end)");
           g.appendChild(arrowPath);
@@ -929,7 +966,7 @@ export default {
           const d = createHandDrawnPath(el.x1, el.y1, el.x2, el.y2, rough);
           linePath.setAttribute("d", d);
           linePath.setAttribute("fill", "none");
-          linePath.setAttribute("stroke", el.strokeColor || "#1e1e1e");
+          linePath.setAttribute("stroke", strokeClr);
           linePath.setAttribute("stroke-width", el.strokeWidth || 2);
           g.appendChild(linePath);
         }
@@ -1063,9 +1100,21 @@ export default {
 
       const target = canvasData?.elements.find((e) => e.id === selectedElementId) || currentStyle;
 
+      // 动态根据当前模式更新首个基准描边色按钮（深色下为象牙白，浅色下为炭黑）
+      const baseStrokeColor = getDefaultStrokeColor();
+      const firstStrokeBtn = inspector.querySelector("[data-prop='strokeColor'][data-base-stroke]");
+      if (firstStrokeBtn) {
+        firstStrokeBtn.dataset.val = baseStrokeColor;
+        firstStrokeBtn.style.background = baseStrokeColor;
+        firstStrokeBtn.title = isDarkMode() ? "手绘白" : "炭黑";
+      }
+
       // 同步颜色选中状态
       inspector.querySelectorAll("[data-prop='strokeColor']").forEach((btn) => {
-        btn.classList.toggle("is-active", btn.dataset.val === target.strokeColor);
+        const val = btn.dataset.val;
+        const targetColor = resolveStrokeColor(target.strokeColor);
+        const isMatched = val === targetColor || (btn.dataset.baseStroke && (target.strokeColor === "#1e1e1e" || target.strokeColor === "#e4e4e7"));
+        btn.classList.toggle("is-active", Boolean(isMatched));
       });
       inspector.querySelectorAll("[data-prop='backgroundColor']").forEach((btn) => {
         btn.classList.toggle("is-active", btn.dataset.val === target.backgroundColor);
@@ -1184,7 +1233,7 @@ export default {
           <div class="edgeever-cb-insp-section">
             <div class="edgeever-cb-insp-label">描边颜色</div>
             <div class="edgeever-cb-palette">
-              <button type="button" class="edgeever-cb-color-dot is-active" data-prop="strokeColor" data-val="#1e1e1e" style="background:#1e1e1e;"></button>
+              <button type="button" class="edgeever-cb-color-dot is-active" data-prop="strokeColor" data-base-stroke="true" data-val="${getDefaultStrokeColor()}" style="background:${getDefaultStrokeColor()};" title="基础手绘色"></button>
               <button type="button" class="edgeever-cb-color-dot" data-prop="strokeColor" data-val="#e11d48" style="background:#e11d48;"></button>
               <button type="button" class="edgeever-cb-color-dot" data-prop="strokeColor" data-val="#2563eb" style="background:#2563eb;"></button>
               <button type="button" class="edgeever-cb-color-dot" data-prop="strokeColor" data-val="#059669" style="background:#059669;"></button>
@@ -1311,6 +1360,7 @@ export default {
         const centerY = (-y + (rect.height || 600) / 2) / zoom;
 
         let newElem = null;
+        const stroke = resolveStrokeColor(currentStyle.strokeColor);
         if (tool === "card") {
           newElem = {
             id: generateId("card"),
@@ -1332,7 +1382,7 @@ export default {
             y: centerY - 50,
             w: 180,
             h: 100,
-            strokeColor: currentStyle.strokeColor,
+            strokeColor: stroke,
             backgroundColor: currentStyle.backgroundColor,
             fillStyle: currentStyle.fillStyle,
             strokeWidth: currentStyle.strokeWidth,
@@ -1346,7 +1396,7 @@ export default {
             y: centerY - 65,
             w: 130,
             h: 130,
-            strokeColor: currentStyle.strokeColor,
+            strokeColor: stroke,
             backgroundColor: currentStyle.backgroundColor,
             fillStyle: currentStyle.fillStyle,
             strokeWidth: currentStyle.strokeWidth,
@@ -1360,7 +1410,7 @@ export default {
             y: centerY - 60,
             w: 120,
             h: 120,
-            strokeColor: currentStyle.strokeColor,
+            strokeColor: stroke,
             backgroundColor: currentStyle.backgroundColor,
             fillStyle: currentStyle.fillStyle,
             strokeWidth: currentStyle.strokeWidth,
@@ -1374,7 +1424,7 @@ export default {
             y1: centerY,
             x2: centerX + 80,
             y2: centerY,
-            strokeColor: currentStyle.strokeColor === "#1e1e1e" ? "#3b82f6" : currentStyle.strokeColor,
+            strokeColor: currentStyle.strokeColor === "#1e1e1e" ? "#3b82f6" : stroke,
             strokeWidth: currentStyle.strokeWidth,
             roughness: currentStyle.roughness,
           };
@@ -1386,7 +1436,7 @@ export default {
             y1: centerY,
             x2: centerX + 80,
             y2: centerY,
-            strokeColor: currentStyle.strokeColor,
+            strokeColor: stroke,
             strokeWidth: currentStyle.strokeWidth,
             roughness: currentStyle.roughness,
           };
@@ -1399,7 +1449,7 @@ export default {
             w: 160,
             h: 40,
             text: "双击输入文本",
-            strokeColor: currentStyle.strokeColor,
+            strokeColor: stroke,
           };
         }
 
@@ -1674,13 +1724,14 @@ export default {
         isDrawing = true;
         startX = p.x;
         startY = p.y;
+        const activeStroke = resolveStrokeColor(currentStyle.strokeColor);
 
         if (activeTool === "freedraw") {
           currentDrawingElement = {
             id: generateId("draw"),
             type: "freedraw",
             points: [[p.x, p.y]],
-            strokeColor: currentStyle.strokeColor,
+            strokeColor: activeStroke,
             strokeWidth: currentStyle.strokeWidth,
           };
           canvasData.elements.push(currentDrawingElement);
@@ -1693,7 +1744,7 @@ export default {
             y: p.y,
             w: 1,
             h: 1,
-            strokeColor: currentStyle.strokeColor,
+            strokeColor: activeStroke,
             backgroundColor: currentStyle.backgroundColor,
             fillStyle: currentStyle.fillStyle,
             strokeWidth: currentStyle.strokeWidth,
@@ -1709,7 +1760,7 @@ export default {
             y1: p.y,
             x2: p.x,
             y2: p.y,
-            strokeColor: currentStyle.strokeColor === "#1e1e1e" && activeTool === "arrow" ? "#3b82f6" : currentStyle.strokeColor,
+            strokeColor: currentStyle.strokeColor === "#1e1e1e" && activeTool === "arrow" ? "#3b82f6" : activeStroke,
             strokeWidth: currentStyle.strokeWidth,
             roughness: currentStyle.roughness,
           };
@@ -1837,7 +1888,7 @@ export default {
               w: 160,
               h: 36,
               text: "双击输入文本",
-              strokeColor: currentStyle.strokeColor,
+              strokeColor: resolveStrokeColor(currentStyle.strokeColor),
             };
             canvasData.elements.push(newText);
             selectedElementId = newText.id;
