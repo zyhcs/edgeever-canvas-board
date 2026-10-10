@@ -995,7 +995,7 @@ export default {
           if (activeTool !== "select") return;
           selectedElementId = el.id;
           renderAll();
-          updateInspector(true);
+          updateInspector(false);
         });
 
         svgLayer.appendChild(g);
@@ -1015,20 +1015,43 @@ export default {
         node.dataset.id = el.id;
         node.style.left = `${el.x}px`;
         node.style.top = `${el.y}px`;
-        node.style.width = `${el.w}px`;
-        node.style.minHeight = `${el.h}px`;
+        node.style.width = el.type === "text" ? "auto" : `${el.w}px`;
+        node.style.minWidth = el.type === "text" ? "60px" : "";
+        node.style.minHeight = `${el.h || 36}px`;
 
         if (el.id === selectedElementId) {
           node.classList.add("is-selected");
         }
 
         node.style.pointerEvents = activeTool === "select" ? "auto" : "none";
+
+        // 处理卡片和文本的点击与选中（绝不在编辑文字时调用 renderAll 摧毁 DOM！）
         node.addEventListener("mousedown", (e) => {
           if (activeTool === "eraser") return;
           if (activeTool !== "select") return;
-          selectedElementId = el.id;
-          renderAll();
-          updateInspector(true);
+
+          const isEditingText = e.target.matches("[contenteditable='true'], input, textarea");
+          if (isEditingText) {
+            // 点击正在编辑的文本，阻止冒泡以防触发画布视口的整体拖拽平移，保持编辑状态！
+            e.stopPropagation();
+            if (selectedElementId !== el.id) {
+              selectedElementId = el.id;
+              stageLayer.querySelectorAll(".edgeever-cb-element").forEach((n) => {
+                n.classList.toggle("is-selected", n.dataset.id === el.id);
+              });
+              updateInspector(false);
+            }
+            return;
+          }
+
+          // 点击组件边框或空白处，选中组件准备拖拽
+          if (selectedElementId !== el.id) {
+            selectedElementId = el.id;
+            stageLayer.querySelectorAll(".edgeever-cb-element").forEach((n) => {
+              n.classList.toggle("is-selected", n.dataset.id === el.id);
+            });
+            updateInspector(false);
+          }
         });
 
         if (el.type === "card") {
@@ -1043,24 +1066,42 @@ export default {
           const titleEl = node.querySelector(".edgeever-cb-card-title");
           const bodyEl = node.querySelector(".edgeever-cb-card-body");
 
-          titleEl.onblur = () => {
-            if (el.title !== titleEl.innerText) {
-              pushHistory();
-              el.title = titleEl.innerText;
-              scheduleAutoSave();
-            }
+          titleEl.oninput = () => {
+            el.title = titleEl.innerText;
+            scheduleAutoSave();
           };
-          bodyEl.onblur = () => {
-            if (el.content !== bodyEl.innerText) {
-              pushHistory();
-              el.content = bodyEl.innerText;
-              scheduleAutoSave();
-            }
+          bodyEl.oninput = () => {
+            el.content = bodyEl.innerText;
+            scheduleAutoSave();
+          };
+
+          titleEl.ondblclick = (e) => {
+            e.stopPropagation();
+            titleEl.focus();
+            document.execCommand("selectAll", false, null);
+          };
+          bodyEl.ondblclick = (e) => {
+            e.stopPropagation();
+            bodyEl.focus();
+            document.execCommand("selectAll", false, null);
           };
         } else if (el.type === "text") {
           node.innerText = el.text || "双击输入文本";
           node.contentEditable = "true";
-          node.style.color = el.strokeColor || "var(--ee-cb-text)";
+          node.spellcheck = false;
+          node.style.color = resolveStrokeColor(el.strokeColor);
+
+          node.oninput = () => {
+            el.text = node.innerText;
+            scheduleAutoSave();
+          };
+
+          node.ondblclick = (e) => {
+            e.stopPropagation();
+            node.focus();
+            document.execCommand("selectAll", false, null);
+          };
+
           node.onblur = () => {
             if (el.text !== node.innerText) {
               pushHistory();
@@ -1080,10 +1121,14 @@ export default {
       const inspector = canvasContainerEl.querySelector(".edgeever-cb-inspector");
       if (!inspector) return;
 
-      // 仅当选中了图元，或者用户主动点击了「样式」按钮开启时，才显示面板；未选中时自动隐藏，绝不遮挡画布！
-      if (selectedElementId || forceOpen) {
+      // 调色板显示策略：
+      // 1. 如果用户主动点击了面板右上角的 ✕ 关闭，或者未主动呼出，绝不强行弹窗遮挡！
+      // 2. 只有当用户点击顶栏【样式】开启，或者显式 forceOpen 时才展开
+      if (inspector.dataset.userClosed === "true" && !forceOpen) {
+        inspector.classList.remove("is-open");
+      } else if (forceOpen || inspector.dataset.userOpened === "true") {
         inspector.classList.add("is-open");
-      } else if (!inspector.dataset.userOpened) {
+      } else {
         inspector.classList.remove("is-open");
       }
 
@@ -1460,7 +1505,7 @@ export default {
           root.querySelectorAll(".edgeever-cb-tool-btn[data-tool]").forEach((b) => b.classList.remove("is-active"));
           root.querySelector(".edgeever-cb-tool-btn[data-tool='select']")?.classList.add("is-active");
           renderAll();
-          updateInspector(true); // 自动展开调色板供用户调整
+          updateInspector(false);
           scheduleAutoSave();
         }
       }
@@ -1534,9 +1579,12 @@ export default {
           if (isOpen) {
             inspectorEl.classList.remove("is-open");
             delete inspectorEl.dataset.userOpened;
+            inspectorEl.dataset.userClosed = "true";
           } else {
             inspectorEl.classList.add("is-open");
             inspectorEl.dataset.userOpened = "true";
+            delete inspectorEl.dataset.userClosed;
+            updateInspector(true);
           }
         };
       }
@@ -1546,6 +1594,7 @@ export default {
         closeInspBtn.onclick = () => {
           inspectorEl.classList.remove("is-open");
           delete inspectorEl.dataset.userOpened;
+          inspectorEl.dataset.userClosed = "true";
         };
       }
 
@@ -1707,7 +1756,7 @@ export default {
           if (clickedTarget && clickedTarget.dataset.id) {
             selectedElementId = clickedTarget.dataset.id;
             renderAll();
-            updateInspector(true);
+            updateInspector(false);
             isDrawing = true;
             currentDrawingElement = canvasData.elements.find((el) => el.id === selectedElementId);
             startX = p.x - (currentDrawingElement.x ?? currentDrawingElement.x1 ?? 0);
@@ -1847,7 +1896,7 @@ export default {
             }
             selectedElementId = currentDrawingElement.id;
             setTool("select");
-            updateInspector(true);
+            updateInspector(false);
           } else if (activeTool === "arrow" || activeTool === "line") {
             if (dist < 8) {
               currentDrawingElement.x1 = Math.round(p.x - 70);
@@ -1857,7 +1906,7 @@ export default {
             }
             selectedElementId = currentDrawingElement.id;
             setTool("select");
-            updateInspector(true);
+            updateInspector(false);
           } else if (activeTool === "card") {
             const w = dist < 8 ? 220 : Math.max(160, Math.abs(p.x - startX));
             const h = dist < 8 ? 110 : Math.max(80, Math.abs(p.y - startY));
@@ -1878,7 +1927,7 @@ export default {
             canvasData.elements.push(newCard);
             selectedElementId = newCard.id;
             setTool("select");
-            updateInspector(true);
+            updateInspector(false);
           } else if (activeTool === "text") {
             const newText = {
               id: generateId("text"),
@@ -1893,7 +1942,7 @@ export default {
             canvasData.elements.push(newText);
             selectedElementId = newText.id;
             setTool("select");
-            updateInspector(true);
+            updateInspector(false);
           }
 
           isDrawing = false;

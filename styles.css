@@ -716,10 +716,25 @@ body.theme-light, [data-theme="light"] {
 .edgeever-cb-text-node {
   padding: 4px 8px;
   font-size: 14px;
+  line-height: 1.5;
   color: var(--ee-cb-text);
   outline: none;
   white-space: pre-wrap;
   cursor: text;
+  border-radius: 4px;
+  border: 1px dashed transparent;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  min-width: 60px;
+}
+
+.edgeever-cb-text-node:hover,
+.edgeever-cb-element.edgeever-cb-text-node.is-selected {
+  border-color: var(--ee-cb-primary) !important;
+}
+
+.edgeever-cb-text-node:focus {
+  border-color: var(--ee-cb-primary) !important;
+  background: rgba(59, 130, 246, 0.08) !important;
 }
 
 /* 拖拽吸附锚点指示器 */
